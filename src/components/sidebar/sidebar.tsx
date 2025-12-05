@@ -39,11 +39,15 @@ import {
   Sparkles,
   LifeBuoy,
   BookOpenCheck,
-  Clock
+  Clock,
+  LogOut,
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { NavItem, NavSubItem } from './nav-item'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Button } from '@/components/ui/button'
+import { createClient } from '@/lib/supabase/client'
 
 // ClassCal Logo Component
 function ClassCalLogo() {
@@ -77,6 +81,13 @@ function ClassCalLogo() {
 
 export function Sidebar() {
   const teacherHref = (path: string) => `/teacher${path}`
+  const router = useRouter()
+  const supabase = createClient()
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   return (
     <aside className="w-64 h-screen flex flex-col border-r border-sidebar-border bg-sidebar">
@@ -230,6 +241,17 @@ export function Sidebar() {
           </NavItem>
         </nav>
       </ScrollArea>
+
+      <div className="border-t border-sidebar-border px-3 py-4">
+        <Button
+          variant="outline"
+          className="w-full justify-start gap-2 text-sm"
+          onClick={handleLogout}
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Sign out</span>
+        </Button>
+      </div>
     </aside>
   )
 }
