@@ -21,11 +21,14 @@ import {
   FileSpreadsheet,
   Grid,
   List,
+  Image as ImageIcon,
 } from 'lucide-react'
 import type { Material } from '@/types/database'
+import { getMaterialTypeLabel, normalizeMaterialType } from '@/lib/material-types'
 
 const typeIcons: Record<string, React.ElementType> = {
-  pdf: FileText,
+  document: FileText,
+  image: ImageIcon,
   video: Video,
   link: Link,
   flashcard: BookOpen,
@@ -34,12 +37,21 @@ const typeIcons: Record<string, React.ElementType> = {
 }
 
 const typeColors: Record<string, string> = {
-  pdf: 'bg-red-100 text-red-600',
+  document: 'bg-red-100 text-red-600',
+  image: 'bg-emerald-100 text-emerald-600',
   video: 'bg-purple-100 text-purple-600',
   link: 'bg-blue-100 text-blue-600',
   flashcard: 'bg-green-100 text-green-600',
   quiz: 'bg-amber-100 text-amber-600',
   worksheet: 'bg-teal-100 text-teal-600',
+}
+
+const getTypeMeta = (type?: string | null) => {
+  const normalized = normalizeMaterialType(type)
+  const Icon = typeIcons[normalized] || FileText
+  const colorClass = typeColors[normalized] || 'bg-gray-100 text-gray-600'
+  const label = getMaterialTypeLabel(normalized)
+  return { normalized, Icon, colorClass, label }
 }
 
 export default function LibraryPage() {
@@ -74,13 +86,13 @@ export default function LibraryPage() {
   const flashcards = filteredMaterials?.filter((m) => m.type === 'flashcard')
   const quizzes = filteredMaterials?.filter((m) => m.type === 'quiz')
   const worksheets = filteredMaterials?.filter((m) => m.type === 'worksheet')
-  const uploads = filteredMaterials?.filter((m) => ['pdf', 'video', 'link'].includes(m.type))
+  const uploads = filteredMaterials?.filter((m) => Boolean(m.file_url))
 
   // Get unique folders
   const folders = [...new Set(materials?.map((m) => m.folder).filter(Boolean))]
 
   const MaterialCard = ({ material }: { material: Material }) => {
-    const Icon = typeIcons[material.type] || FileText
+    const { Icon, colorClass } = getTypeMeta(material.type)
     
     return (
       <Card
@@ -89,7 +101,7 @@ export default function LibraryPage() {
       >
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${typeColors[material.type] || 'bg-gray-100 text-gray-600'}`}>
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorClass}`}>
               <Icon className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
@@ -114,14 +126,14 @@ export default function LibraryPage() {
   }
 
   const MaterialListItem = ({ material }: { material: Material }) => {
-    const Icon = typeIcons[material.type] || FileText
+    const { Icon, colorClass, label } = getTypeMeta(material.type)
     
     return (
       <div
         className="flex items-center gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
         onClick={() => openDrawer('material', material.id)}
       >
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${typeColors[material.type] || 'bg-gray-100 text-gray-600'}`}>
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorClass}`}>
           <Icon className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0">
@@ -140,7 +152,7 @@ export default function LibraryPage() {
           ))}
         </div>
         <Badge variant="outline" className="capitalize">
-          {material.type}
+          {label}
         </Badge>
       </div>
     )

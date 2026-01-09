@@ -260,54 +260,301 @@
   @apply bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300;
 }
 
-.badge-confirmed {
-  @apply bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300;
+.badge-info {
+  @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300;
 }
 
-.badge-completed {
-  @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300;
+.badge-success {
+  @apply bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300;
 }
 
 .badge-cancelled {
   @apply bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300;
 }
 
-/* FullCalendar custom styling */
+.badge-overdue {
+  @apply bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200;
+}
+
+.badge-warning {
+  @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200;
+}
+
+/* FullCalendar custom styling - 2025 minimal */
 .fc {
-  --fc-border-color: var(--border);
-  --fc-button-bg-color: var(--secondary);
-  --fc-button-border-color: var(--border);
-  --fc-button-text-color: var(--foreground);
+  /* Core variables - subtle, airy feel */
+  --fc-border-color: oklch(0.86 0.008 80);
+  --fc-button-bg-color: transparent;
+  --fc-button-border-color: transparent;
+  --fc-button-text-color: var(--muted-foreground);
   --fc-button-hover-bg-color: var(--accent);
-  --fc-button-hover-border-color: var(--border);
-  --fc-button-active-bg-color: var(--primary);
-  --fc-button-active-border-color: var(--primary);
+  --fc-button-hover-border-color: transparent;
+  --fc-button-active-bg-color: var(--secondary);
+  --fc-button-active-border-color: transparent;
   --fc-event-bg-color: var(--primary);
-  --fc-event-border-color: var(--primary);
-  --fc-today-bg-color: oklch(0.97 0.02 145 / 0.3);
+  --fc-event-border-color: transparent;
+  --fc-today-bg-color: oklch(0.97 0.015 145 / 0.15);
+  --fc-neutral-bg-color: transparent;
+  --fc-page-bg-color: transparent;
+  --fc-highlight-color: oklch(0.96 0.02 200 / 0.25);
+  --fc-non-business-color: transparent;
+  font-family: var(--font-sans);
 }
 
-.fc .fc-button {
-  @apply rounded-lg font-medium text-sm shadow-none;
+.dark .fc {
+  --fc-border-color: oklch(0.4 0.01 260);
+  --fc-today-bg-color: oklch(0.22 0.02 145 / 0.15);
+  --fc-highlight-color: oklch(0.28 0.02 200 / 0.3);
 }
 
-.fc .fc-button-primary:not(:disabled).fc-button-active {
-  @apply bg-primary text-primary-foreground;
+/* Remove heavy outer borders */
+.fc .fc-scrollgrid {
+  border: none !important;
+}
+
+/* Keep the outer frame minimal but preserve internal grid navigation lines */
+.fc .fc-scrollgrid-section-header > * {
+  border: none !important;
+}
+
+.fc .fc-scrollgrid-section-body > *,
+.fc .fc-scrollgrid-section-footer > * {
+  border-color: var(--fc-border-color) !important;
+}
+
+/* Ensure theme-standard table borders use our variable */
+.fc.fc-theme-standard td,
+.fc.fc-theme-standard th {
+  border-color: var(--fc-border-color) !important;
+}
+
+/* Day grid cells - minimal separators */
+.fc .fc-daygrid-day {
+  border-color: oklch(0.88 0.01 80) !important;
+}
+
+.dark .fc .fc-daygrid-day {
+  border-color: oklch(0.36 0.01 260) !important;
+}
+
+.fc .fc-daygrid-day-frame {
+  padding: 4px;
+  min-height: 100px;
 }
 
 .fc .fc-daygrid-day-number {
-  @apply p-2 text-sm font-medium;
+  padding: 8px 10px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--foreground);
+  opacity: 0.8;
+}
+
+.fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: 9999px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 1;
+}
+
+/* Column headers - clean, subtle */
+.fc .fc-col-header {
+  background: transparent;
+  border-bottom: 1px solid var(--fc-border-color) !important;
+}
+
+.fc .fc-col-header-cell {
+  background: transparent;
+  border: none !important;
+  padding: 4px 0 4px;
 }
 
 .fc .fc-col-header-cell-cushion {
-  @apply py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground;
+  padding: 6px 12px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
 }
 
+/* Time grid - barely visible hour lines */
+.fc .fc-timegrid-slot {
+  height: 48px;
+  border-color: oklch(0.88 0.01 80) !important;
+}
+
+.dark .fc .fc-timegrid-slot {
+  border-color: oklch(0.36 0.01 260) !important;
+}
+
+.fc .fc-timegrid-slot-minor {
+  border-color: transparent !important;
+}
+
+/* Time labels - small, muted */
+.fc .fc-timegrid-axis-cushion,
+.fc .fc-timegrid-slot-label-cushion {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--muted-foreground);
+  opacity: 0.7;
+  padding: 4px 8px;
+}
+
+/* Time grid columns */
+.fc .fc-timegrid-col {
+  border-color: oklch(0.88 0.01 80) !important;
+}
+
+.dark .fc .fc-timegrid-col {
+  border-color: oklch(0.36 0.01 260) !important;
+}
+
+/* Divider between time axis and grid */
+.fc .fc-timegrid-divider {
+  border-color: var(--fc-border-color) !important;
+}
+
+/* Today column - gentle highlight */
+.fc .fc-day-today {
+  background: var(--fc-today-bg-color) !important;
+}
+
+/* Now indicator - subtle line */
+.fc .fc-timegrid-now-indicator-line {
+  border-color: oklch(0.65 0.2 25);
+  border-width: 1px;
+}
+
+.fc .fc-timegrid-now-indicator-arrow {
+  border-color: oklch(0.65 0.2 25);
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+}
+
+/* Events - soft, modern chips */
 .fc-event {
-  @apply rounded-md px-2 py-1 text-xs font-medium cursor-pointer;
-  @apply border-none shadow-sm;
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 3px 8px !important;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.04);
 }
 
-.fc-timegrid-slot {
-  @apply border-border/50;
+.fc-event:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.08);
+}
+
+/* Time grid events */
+.fc .fc-timegrid-event {
+  border-radius: 6px !important;
+  border: none !important;
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.06);
+}
+
+.fc .fc-timegrid-event .fc-event-main {
+  padding: 4px 8px;
+}
+
+/* Day grid events (month view) */
+.fc .fc-daygrid-event {
+  border-radius: 4px !important;
+  margin: 1px 2px;
+  padding: 2px 6px !important;
+}
+
+.fc .fc-daygrid-dot-event {
+  padding: 2px 4px;
+}
+
+/* Background events (availability) - visible but subtle */
+.fc .fc-bg-event {
+  background: oklch(0.92 0.04 145 / 0.35) !important;
+  border: none !important;
+  opacity: 1 !important;
+}
+
+.dark .fc .fc-bg-event {
+  background: oklch(0.35 0.06 145 / 0.25) !important;
+}
+
+/* More events link */
+.fc .fc-daygrid-more-link {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.fc .fc-daygrid-more-link:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+/* Selection highlight */
+.fc .fc-highlight {
+  background: var(--fc-highlight-color) !important;
+  border-radius: 4px;
+}
+
+/* Remove default button styling (we use custom header) */
+.fc .fc-button {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  box-shadow: none !important;
+  border: none !important;
+  transition: background 0.15s ease;
+}
+
+.fc .fc-button:focus {
+  box-shadow: none !important;
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+
+/* Popover (more events) */
+.fc .fc-popover {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px oklch(0 0 0 / 0.08);
+}
+
+.fc .fc-popover-header {
+  background: transparent;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
+}
+
+.fc .fc-popover-body {
+  padding: 8px;
+}
+
+/* Week numbers (if enabled) */
+.fc .fc-daygrid-week-number {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--muted-foreground);
+  opacity: 0.6;
+  padding: 4px 8px;
 }

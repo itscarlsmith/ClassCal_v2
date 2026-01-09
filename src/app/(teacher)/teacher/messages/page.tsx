@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -53,40 +53,47 @@ export default function MessagesPage() {
     },
   })
 
+  const selectedStudent = useMemo(
+    () => students?.find((s) => s.id === selectedThread) ?? null,
+    [students, selectedThread]
+  )
+
+  const teacherId = currentUser?.id ?? null
+  const studentProfileId = selectedStudent?.user_id ?? null
+
   // Fetch messages for selected thread
   const { data: messages, isLoading: messagesLoading } = useQuery({
-    queryKey: ['messages', selectedThread],
+    queryKey: ['teacher-messages', teacherId, studentProfileId],
+    enabled: Boolean(teacherId && studentProfileId),
     queryFn: async () => {
-      if (!selectedThread) return []
-      
-      // Find the student
-      const student = students?.find(s => s.id === selectedThread)
-      if (!student?.user_id) return []
+      if (!teacherId || !studentProfileId) return []
 
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .or(`and(sender_id.eq.${currentUser?.id},recipient_id.eq.${student.user_id}),and(sender_id.eq.${student.user_id},recipient_id.eq.${currentUser?.id})`)
+        .or(
+          `and(sender_id.eq.${teacherId},recipient_id.eq.${studentProfileId}),and(sender_id.eq.${studentProfileId},recipient_id.eq.${teacherId})`
+        )
         .order('created_at', { ascending: true })
-      
+
       if (error) throw error
       return data as Message[]
     },
-    enabled: !!selectedThread && !!students && !!currentUser,
   })
 
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
-      const student = students?.find(s => s.id === selectedThread)
-      if (!student?.user_id) throw new Error('Student has no account')
+      if (!selectedStudent?.user_id || !teacherId) {
+        throw new Error('Missing participant information')
+      }
 
       // Get or create thread
       let threadId: string
       const { data: existingThread } = await supabase
         .from('message_threads')
         .select('id')
-        .contains('participant_ids', [currentUser?.id, student.user_id])
+        .contains('participant_ids', [teacherId, selectedStudent.user_id])
         .single()
 
       if (existingThread) {
@@ -95,7 +102,7 @@ export default function MessagesPage() {
         const { data: newThread, error: threadError } = await supabase
           .from('message_threads')
           .insert({
-            participant_ids: [currentUser?.id, student.user_id],
+            participant_ids: [teacherId, selectedStudent.user_id],
           })
           .select()
           .single()
@@ -105,8 +112,8 @@ export default function MessagesPage() {
 
       // Send message
       const { error } = await supabase.from('messages').insert({
-        sender_id: currentUser?.id,
-        recipient_id: student.user_id,
+        sender_id: teacherId,
+        recipient_id: selectedStudent.user_id,
         thread_id: threadId,
         content,
       })
@@ -119,7 +126,9 @@ export default function MessagesPage() {
         .eq('id', threadId)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages', selectedThread] })
+      queryClient.invalidateQueries({
+        queryKey: ['teacher-messages', teacherId, studentProfileId],
+      })
       setMessageText('')
     },
     onError: (error) => {
@@ -132,6 +141,20 @@ export default function MessagesPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Mark messages as read when opening a conversation (teacher as recipient)
+  useEffect(() => {
+    const markRead = async () => {
+      if (!teacherId || !studentProfileId) return
+      await supabase
+        .from('messages')
+        .update({ is_read: true })
+        .eq('recipient_id', teacherId)
+        .eq('sender_id', studentProfileId)
+        .eq('is_read', false)
+    }
+    markRead()
+  }, [teacherId, studentProfileId, supabase])
 
   const getInitials = (name: string) => {
     return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -155,8 +178,6 @@ export default function MessagesPage() {
       s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.email.toLowerCase().includes(searchQuery.toLowerCase())
   )
-
-  const selectedStudent = students?.find(s => s.id === selectedThread)
 
   return (
     <div className="h-full flex">
@@ -242,14 +263,14 @@ export default function MessagesPage() {
                           'max-w-[70%] rounded-2xl px-4 py-2',
                           isOwn
                             ? 'bg-primary text-primary-foreground rounded-br-md'
-                            : 'bg-muted rounded-bl-md'
+                            : 'bg-muted-foreground/15 text-foreground rounded-bl-md'
                         )}
                       >
                         <p className="text-sm">{message.content}</p>
                         <p
                           className={cn(
                             'text-xs mt-1',
-                            isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                            isOwn ? 'text-primary-foreground/70' : 'text-foreground/60'
                           )}
                         >
                           {format(new Date(message.created_at), 'h:mm a')}

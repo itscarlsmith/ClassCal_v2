@@ -65,8 +65,8 @@ export async function getBookableSlotsForTeacher(
     .select('*')
     .eq('teacher_id', teacherId)
     .in('status', ['pending', 'confirmed'])
-    .gte('start_time', queryStart.toISOString())
-    .lte('end_time', queryEnd.toISOString())
+    .lt('start_time', queryEnd.toISOString())
+    .gt('end_time', queryStart.toISOString())
 
   if (lessonsError) {
     console.error('Error fetching lessons for slots', lessonsError)

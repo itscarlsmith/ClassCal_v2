@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Drawer, DrawerSection, DrawerFooter } from '../drawer'
 import { useAppStore } from '@/store/app-store'
@@ -51,12 +51,20 @@ import {
   ChevronsUpDown,
   X,
 } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { LessonVideoCall } from '@/components/lesson/lesson-video-call'
+import { LessonChat } from '@/components/lesson/lesson-chat'
 import { cn } from '@/lib/utils'
 import type { Lesson, Student, LessonStatus, Material } from '@/types/database'
 
 interface LessonDrawerProps {
   id: string | null
   data?: Record<string, unknown>
+}
+
+type LessonParticipant = {
+  student_id: string
+  student: Pick<Student, 'id' | 'full_name' | 'email' | 'avatar_url'> | null
 }
 
 export function LessonDrawer({ id, data }: LessonDrawerProps) {
@@ -89,6 +97,7 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
   const [isRecurring, setIsRecurring] = useState(false)
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([])
   const [materialsPopoverOpen, setMaterialsPopoverOpen] = useState(false)
+  const [participantToAdd, setParticipantToAdd] = useState('')
 
   // Fetch lesson data
   const { data: lesson, isLoading } = useQuery({
@@ -167,6 +176,31 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
     enabled: !isNew && !!id,
   })
 
+  const { data: lessonParticipants, isLoading: participantsLoading } = useQuery({
+    queryKey: ['lesson-participants', id],
+    enabled: !isNew && !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('lesson_students')
+        .select('student_id, student:students(id, full_name, email, avatar_url)')
+        .eq('lesson_id', id)
+      if (error) throw error
+      return (data || []).map((row: any) => {
+        const student = Array.isArray(row.student) ? row.student?.[0] : row.student
+        return {
+          student_id: row.student_id,
+          student: student ?? null,
+        } as LessonParticipant
+      })
+    },
+  })
+
+  const availableParticipants = useMemo(() => {
+    if (!students) return []
+    const existingIds = new Set((lessonParticipants || []).map((participant) => participant.student_id))
+    return students.filter((student) => !existingIds.has(student.id))
+  }, [students, lessonParticipants])
+
   // Update form when lesson data loads
   useEffect(() => {
     if (lesson) {
@@ -195,10 +229,7 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       // Determine status: if pre-agreed is checked, status is confirmed, otherwise pending
-      // For new lessons, use the checkbox. For existing lessons, keep the current status unless it's being explicitly changed
-      const finalStatus = isNew 
-        ? (preAgreed ? 'confirmed' : 'pending')
-        : data.status
+      const finalStatus = isNew ? (preAgreed ? 'confirmed' : 'pending') : data.status
 
       const payload = {
         ...data,
@@ -212,13 +243,30 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
       let lessonId: string
 
       if (isNew) {
-        const { data: newLesson, error } = await supabase
-          .from('lessons')
-          .insert(payload)
-          .select()
-          .single()
-        if (error) throw error
-        lessonId = newLesson.id
+        const res = await fetch('/api/teacher/lessons', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: payload.student_id,
+            title: payload.title,
+            description: payload.description,
+            start_time: payload.start_time,
+            end_time: payload.end_time,
+            credits_used: payload.credits_used,
+            meeting_url: payload.meeting_url,
+            is_recurring: payload.is_recurring,
+            status: payload.status,
+          }),
+        })
+
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          const message = json?.error || 'Failed to create lesson.'
+          throw new Error(message)
+        }
+
+        lessonId = json?.lesson?.id ?? json?.id
+        if (!lessonId) throw new Error('Lesson creation response missing id')
 
         // Save lesson materials
         if (selectedMaterials.length > 0) {
@@ -232,24 +280,36 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
           if (materialsError) throw materialsError
         }
       } else {
-        const { data: updated, error } = await supabase
-          .from('lessons')
-          .update(payload)
-          .eq('id', id)
-          .select()
-          .single()
-        if (error) throw error
-        lessonId = updated.id
+        // Existing lesson: route through teacher API for validation/reschedule rules
+        const body: Record<string, unknown> = {
+          title: payload.title,
+          description: payload.description,
+          meeting_url: payload.meeting_url,
+          start_time: payload.start_time,
+          end_time: payload.end_time,
+        }
+
+        const res = await fetch(`/api/teacher/lessons/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          const message = json?.error || 'Failed to update lesson.'
+          throw new Error(message)
+        }
+
+        lessonId = id as string
 
         // Update lesson materials
-        // First, delete existing materials
         const { error: deleteError } = await supabase
           .from('lesson_materials')
           .delete()
           .eq('lesson_id', lessonId)
         if (deleteError) throw deleteError
 
-        // Then, insert new materials
         if (selectedMaterials.length > 0) {
           const materialsToInsert = selectedMaterials.map((materialId) => ({
             lesson_id: lessonId,
@@ -272,45 +332,79 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
       if (isNew) closeDrawer()
     },
     onError: (error) => {
-      toast.error('Failed to save lesson')
+      const message = error instanceof Error ? error.message : 'Failed to save lesson'
+      toast.error(message)
       console.error(error)
     },
   })
 
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('lessons').delete().eq('id', id)
+  // Status / cancel mutation via teacher API
+  const statusMutation = useMutation({
+    mutationFn: async (next: LessonStatus | 'cancel') => {
+      if (!id) throw new Error('Missing lesson id')
+      const isCancel = next === 'cancel'
+      const body = isCancel ? { action: 'cancel' } : { status: next }
+
+      const res = await fetch(`/api/teacher/lessons/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const message = json?.error || 'Failed to update status'
+        throw new Error(message)
+      }
+      return next
+    },
+    onSuccess: (next) => {
+      queryClient.invalidateQueries({ queryKey: ['lessons'] })
+      queryClient.invalidateQueries({ queryKey: ['lesson', id] })
+      toast.success(next === 'cancel' ? 'Lesson cancelled' : `Lesson marked as ${next}`)
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Failed to update status'
+      toast.error(message)
+    },
+  })
+
+  const addParticipantMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      if (!id) throw new Error('Missing lesson id')
+      const { error } = await supabase.from('lesson_students').insert({
+        lesson_id: id,
+        student_id: studentId,
+      })
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lessons'] })
-      toast.success('Lesson deleted')
-      closeDrawer()
+      queryClient.invalidateQueries({ queryKey: ['lesson-participants', id] })
+      toast.success('Participant added')
+      setParticipantToAdd('')
     },
-    onError: (error) => {
-      toast.error('Failed to delete lesson')
-      console.error(error)
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Unable to add participant'
+      toast.error(message)
     },
   })
 
-  // Status update mutation
-  const statusMutation = useMutation({
-    mutationFn: async (newStatus: LessonStatus) => {
+  const removeParticipantMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      if (!id) throw new Error('Missing lesson id')
       const { error } = await supabase
-        .from('lessons')
-        .update({ status: newStatus })
-        .eq('id', id)
+        .from('lesson_students')
+        .delete()
+        .eq('lesson_id', id)
+        .eq('student_id', studentId)
       if (error) throw error
     },
-    onSuccess: (_, newStatus) => {
-      queryClient.invalidateQueries({ queryKey: ['lessons'] })
-      queryClient.invalidateQueries({ queryKey: ['lesson', id] })
-      toast.success(`Lesson marked as ${newStatus}`)
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lesson-participants', id] })
+      toast.success('Participant removed')
     },
-    onError: (error) => {
-      toast.error('Failed to update status')
-      console.error(error)
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Unable to remove participant'
+      toast.error(message)
     },
   })
 
@@ -322,6 +416,13 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
     if (!formData.credits_used || formData.credits_used < 1) {
       toast.error('Credits must be at least 1')
       return
+    }
+    if (!isNew && lesson) {
+      const isPast = new Date(lesson.start_time) <= new Date()
+      if (isPast || lesson.status === 'cancelled' || lesson.status === 'completed') {
+        toast.error('Cannot edit past, cancelled, or completed lessons')
+        return
+      }
     }
     saveMutation.mutate(formData)
   }
@@ -344,51 +445,10 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
     }
   }
 
-  return (
-    <Drawer
-      title={isNew ? 'Schedule Lesson' : lesson?.title || 'Lesson'}
-      subtitle={
-        isNew
-          ? 'Create a new lesson'
-          : lesson
-          ? format(new Date(lesson.start_time), "EEEE, MMMM d 'at' h:mm a")
-          : undefined
-      }
-      width="lg"
-      footer={
-        <DrawerFooter>
-          {!isNew && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={() => {
-                if (confirm('Are you sure you want to delete this lesson?')) {
-                  deleteMutation.mutate()
-                }
-              }}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete
-            </Button>
-          )}
-          <div className="flex-1" />
-          <Button variant="outline" onClick={closeDrawer}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={saveMutation.isPending}>
-            <Save className="w-4 h-4 mr-2" />
-            {isNew ? 'Create Lesson' : 'Save Changes'}
-          </Button>
-        </DrawerFooter>
-      }
-    >
-      {isLoading && !isNew ? (
-        <div className="flex items-center justify-center h-48">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-        </div>
-      ) : (
-        <div className="space-y-6">
+  const primaryStudentId = lesson?.student_id ?? null
+
+  const detailsContent = (
+    <div className="space-y-6">
           {/* Student Info (for existing lessons) */}
           {!isNew && lesson?.student && (
             <div
@@ -409,8 +469,8 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
             </div>
           )}
 
-          {/* Quick Status Actions (for existing non-completed lessons) */}
-          {!isNew && lesson && lesson.status !== 'completed' && lesson.status !== 'cancelled' && (
+          {/* Quick Status Actions */}
+          {!isNew && lesson && (
             <div className="flex gap-2">
               {lesson.status === 'pending' && (
                 <Button
@@ -418,31 +478,40 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
                   size="sm"
                   className="flex-1"
                   onClick={() => statusMutation.mutate('confirmed')}
+                  disabled={statusMutation.isPending}
                 >
                   <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
                   Confirm
                 </Button>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                onClick={() => statusMutation.mutate('completed')}
-              >
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Mark Complete
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (confirm('Are you sure you want to cancel this lesson?')) {
-                    statusMutation.mutate('cancelled')
-                  }
-                }}
-              >
-                <XCircle className="w-4 h-4 text-destructive" />
-              </Button>
+              {lesson.status !== 'cancelled' && lesson.status !== 'completed' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => statusMutation.mutate('completed')}
+                  disabled={statusMutation.isPending}
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Mark Complete
+                </Button>
+              )}
+              {lesson.status !== 'completed' &&
+                lesson.status !== 'cancelled' &&
+                new Date(lesson.start_time) > new Date() && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm('Are you sure you want to cancel this lesson?')) {
+                        statusMutation.mutate('cancel')
+                      }
+                    }}
+                    disabled={statusMutation.isPending}
+                  >
+                    <XCircle className="w-4 h-4 text-destructive" />
+                  </Button>
+                )}
             </div>
           )}
 
@@ -715,7 +784,125 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
               </DrawerSection>
             </>
           )}
+          {!isNew && lesson && (
+            <>
+              <Separator />
+              <DrawerSection title="Participants">
+                {participantsLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading participants…</p>
+                ) : lessonParticipants && lessonParticipants.length > 0 ? (
+                  <div className="space-y-3">
+                    {lessonParticipants.map((participant) => {
+                      const isPrimary = participant.student_id === primaryStudentId
+                      return (
+                        <div
+                          key={participant.student_id}
+                          className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
+                        >
+                          <div>
+                            <p className="font-medium">
+                              {participant.student?.full_name || 'Student'}
+                            </p>
+                            {participant.student?.email && (
+                              <p className="text-xs text-muted-foreground">
+                                {participant.student.email}
+                              </p>
+                            )}
+                          </div>
+                          {isPrimary ? (
+                            <Badge className="badge-confirmed">Primary</Badge>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeParticipantMutation.mutate(participant.student_id)}
+                              disabled={removeParticipantMutation.isPending}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No additional participants yet. Add students to invite them to the live call.
+                  </p>
+                )}
+
+                {availableParticipants.length > 0 && (
+                  <div className="mt-4 flex gap-2">
+                    <Select value={participantToAdd} onValueChange={setParticipantToAdd}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select student to add" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableParticipants.map((student) => (
+                          <SelectItem key={student.id} value={student.id}>
+                            {student.full_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      onClick={() => participantToAdd && addParticipantMutation.mutate(participantToAdd)}
+                      disabled={!participantToAdd || addParticipantMutation.isPending}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                )}
+              </DrawerSection>
+            </>
+          )}
         </div>
+  )
+
+  return (
+    <Drawer
+      title={isNew ? 'Schedule Lesson' : lesson?.title || 'Lesson'}
+      subtitle={
+        isNew
+          ? 'Create a new lesson'
+          : lesson
+          ? format(new Date(lesson.start_time), "EEEE, MMMM d 'at' h:mm a")
+          : undefined
+      }
+      width="lg"
+      footer={
+        <DrawerFooter>
+          <div className="flex-1" />
+          <Button variant="outline" onClick={closeDrawer}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saveMutation.isPending}>
+            <Save className="w-4 h-4 mr-2" />
+            {isNew ? 'Create Lesson' : 'Save Changes'}
+          </Button>
+        </DrawerFooter>
+      }
+    >
+      {isLoading && !isNew ? (
+        <div className="flex items-center justify-center h-48">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      ) : isNew || !lesson ? (
+        detailsContent
+      ) : (
+        <Tabs defaultValue="details" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="live">Live session</TabsTrigger>
+          </TabsList>
+          <TabsContent value="details">{detailsContent}</TabsContent>
+          <TabsContent value="live">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <LessonVideoCall lessonId={lesson.id} className="h-[500px]" />
+              <LessonChat lessonId={lesson.id} className="h-[500px]" />
+            </div>
+          </TabsContent>
+        </Tabs>
       )}
     </Drawer>
   )

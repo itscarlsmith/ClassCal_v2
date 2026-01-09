@@ -11,11 +11,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Plus, Calendar, Clock, Video, FileText } from 'lucide-react'
 import { format, isPast, isFuture, isToday } from 'date-fns'
 import type { Lesson, Student } from '@/types/database'
+import { isJoinWindowOpen, useNow } from '@/lib/lesson-join'
+import { useRouter } from 'next/navigation'
 
 type LessonWithStudent = Lesson & { student: Pick<Student, 'id' | 'full_name' | 'avatar_url' | 'email'> }
 
 export default function LessonsPage() {
   const { openDrawer } = useAppStore()
+  const router = useRouter()
   const supabase = createClient()
 
   // Fetch lessons
@@ -33,7 +36,11 @@ export default function LessonsPage() {
     },
   })
 
-  const upcomingLessons = lessons?.filter((l) => isFuture(new Date(l.start_time)) || isToday(new Date(l.start_time)))
+  const upcomingLessons = lessons?.filter(
+    (l) =>
+      (isFuture(new Date(l.start_time)) || isToday(new Date(l.start_time))) &&
+      l.status !== 'cancelled'
+  )
   const pastLessons = lessons?.filter((l) => isPast(new Date(l.end_time)))?.reverse()
 
   const getInitials = (name: string) => {
@@ -49,9 +56,14 @@ export default function LessonsPage() {
     }
   }
 
+  const now = useNow(30_000)
+
   const LessonCard = ({ lesson }: { lesson: LessonWithStudent }) => {
     const lessonDate = new Date(lesson.start_time)
     const endTime = new Date(lesson.end_time)
+    const joinVisible =
+      lesson.status === 'confirmed' &&
+      isJoinWindowOpen({ startTime: lesson.start_time, endTime: lesson.end_time, now })
     
     return (
       <div
@@ -78,6 +90,19 @@ export default function LessonsPage() {
           <p className="text-sm text-muted-foreground">
             {format(lessonDate, 'h:mm a')} - {format(endTime, 'h:mm a')}
           </p>
+          {joinVisible && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mt-2"
+              onClick={(e) => {
+                e.stopPropagation()
+                router.push(`/teacher/lessons/${lesson.id}/call`)
+              }}
+            >
+              Join
+            </Button>
+          )}
         </div>
         <div className="flex gap-2">
           {lesson.meeting_url && (
