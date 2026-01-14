@@ -31,28 +31,57 @@ export async function POST(
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    // Ensure the authenticated user is linked to the lesson via students.user_id
-    const { data: lesson, error: lessonError } = await supabase
+    // Load lesson (service client) and verify the authenticated user is a participant:
+    // - either the primary lessons.student_id belongs to this user
+    // - or the user participates via lesson_students
+    const { data: lesson, error: lessonError } = await serviceSupabase
       .from('lessons')
-      .select(
-        'id, status, start_time, end_time, teacher_id, student_id, student:students!inner(id, user_id)'
-      )
+      .select('id, status, start_time, end_time, teacher_id, student_id')
       .eq('id', lessonId)
-      .eq('student.user_id', userData.user.id)
       .single()
 
     if (lessonError || !lesson) {
       return NextResponse.json(
-        { error: 'Lesson not found for this student' },
+        { error: 'Lesson not found' },
         { status: 404 }
       )
     }
 
-    const lessonStudent =
-      Array.isArray((lesson as any).student) ? (lesson as any).student?.[0] : (lesson as any).student
-    const lessonStudentUserId: string | null = lessonStudent?.user_id ?? null
-    if (!lessonStudentUserId) {
-      return NextResponse.json({ error: 'Invalid lesson student context' }, { status: 500 })
+    const { data: studentIdsForUserRows, error: studentIdsError } = await serviceSupabase
+      .from('students')
+      .select('id')
+      .eq('user_id', userData.user.id)
+
+    if (studentIdsError) {
+      console.error('Error fetching student ids for user', studentIdsError)
+      return NextResponse.json({ error: 'Failed to verify student context' }, { status: 500 })
+    }
+
+    const studentIdsForUser = (studentIdsForUserRows || []).map((row) => row.id)
+    if (studentIdsForUser.length === 0) {
+      return NextResponse.json({ error: 'Lesson not found for this student' }, { status: 404 })
+    }
+
+    const isPrimaryParticipant = studentIdsForUser.includes(lesson.student_id)
+    let isGroupParticipant = false
+
+    if (!isPrimaryParticipant) {
+      const { count, error: groupCheckError } = await serviceSupabase
+        .from('lesson_students')
+        .select('lesson_id', { count: 'exact', head: true })
+        .eq('lesson_id', lessonId)
+        .in('student_id', studentIdsForUser)
+
+      if (groupCheckError) {
+        console.error('Error verifying lesson group participation', groupCheckError)
+        return NextResponse.json({ error: 'Failed to verify lesson participation' }, { status: 500 })
+      }
+
+      isGroupParticipant = (count ?? 0) > 0
+    }
+
+    if (!isPrimaryParticipant && !isGroupParticipant) {
+      return NextResponse.json({ error: 'Lesson not found for this student' }, { status: 404 })
     }
 
     const now = new Date()
@@ -82,21 +111,6 @@ export async function POST(
           { status: 409 }
         )
       }
-
-      const { data: siblingStudents, error: siblingError } = await serviceSupabase
-        .from('students')
-        .select('id')
-        .eq('user_id', lessonStudentUserId)
-
-      if (siblingError) {
-        console.error('Error fetching sibling students for overlap check', siblingError)
-        return NextResponse.json(
-          { error: 'Failed to verify availability.' },
-          { status: 500 }
-        )
-      }
-
-      const studentIdsForUser = (siblingStudents || []).map((s) => s.id)
 
       const { hasConflict, error: overlapError } = await checkLessonOverlap({
         supabase: serviceSupabase,

@@ -7,6 +7,12 @@ interface TokenRequestBody {
   lesson_id?: string
 }
 
+function getErrorField(err: unknown, key: string): unknown {
+  if (typeof err !== 'object' || err === null) return undefined
+  const record = err as Record<string, unknown>
+  return key in record ? record[key] : undefined
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
@@ -58,17 +64,24 @@ export async function POST(request: Request) {
         .eq('student.user_id', user.id)
         .maybeSingle()
 
-      if (participantError) {
+      const isLessonStudentsMissing =
+        Boolean(participantError) &&
+        (String(getErrorField(participantError, 'code')) === '42P01' ||
+          String(getErrorField(participantError, 'message') || '')
+            .toLowerCase()
+            .includes('lesson_students') ||
+          Number(getErrorField(participantError, 'status')) === 404)
+      if (participantError && !isLessonStudentsMissing) {
         console.error('Error validating lesson participant', participantError)
         return NextResponse.json({ error: 'Unable to validate participant' }, { status: 500 })
       }
 
       if (participant?.student) {
+        const studentRel = (participant as unknown as { student?: unknown }).student
         const student =
-          Array.isArray((participant as any).student)
-            ? (participant as any).student?.[0]
-            : (participant as any).student
-        studentId = student?.id ?? null
+          Array.isArray(studentRel) ? (studentRel[0] as Record<string, unknown> | undefined) : (studentRel as Record<string, unknown> | undefined)
+        const idValue = student ? student['id'] : undefined
+        studentId = typeof idValue === 'string' ? idValue : null
       } else if (lesson.student_id) {
         // Fallback to legacy single-student lessons
         const { data: legacyStudent } = await serviceSupabase
@@ -93,7 +106,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Not authorized for this lesson' }, { status: 403 })
     }
 
-    const token = createLessonAccessToken({
+    const tokenResult = createLessonAccessToken({
       lessonId: lesson.id,
       identity,
       metadata: {
@@ -103,6 +116,12 @@ export async function POST(request: Request) {
         studentId,
       },
     })
+
+    const token = await Promise.resolve(tokenResult)
+    if (typeof token !== 'string' || token.length === 0) {
+      console.error('LiveKit token generation returned non-string token')
+      return NextResponse.json({ error: 'Unable to start the call.' }, { status: 500 })
+    }
 
     return NextResponse.json({ token })
   } catch (error) {

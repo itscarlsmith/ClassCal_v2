@@ -30,7 +30,9 @@ import type { DatesSetArg, EventClickArg } from '@fullcalendar/core'
 import type { DateClickArg } from '@fullcalendar/interaction'
 import type { Lesson, AvailabilityBlock } from '@/types/database'
 import { toast } from 'sonner'
-import { isJoinWindowOpen, useNow } from '@/lib/lesson-join'
+import { isJoinWindowOpen } from '@/lib/lesson-join'
+import { useNow } from '@/lib/lesson-join-client'
+import { useFullCalendarAutosize } from '@/lib/use-fullcalendar-autosize'
 
 type TeacherOption = {
   teacherId: string
@@ -52,6 +54,7 @@ const statusColors: Record<string, { bg: string; border: string; text: string }>
 
 export default function StudentCalendarPage() {
   const calendarRef = useRef<FullCalendar>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const supabase = createClient()
   const { openDrawer } = useAppStore()
   const router = useRouter()
@@ -67,6 +70,8 @@ export default function StudentCalendarPage() {
   })
   const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null)
   const [showAvailability, setShowAvailability] = useState(true)
+
+  useFullCalendarAutosize({ calendarRef, containerRef })
 
   const { data: studentRows, isLoading: isTeachersLoading } = useQuery<any[]>({
     queryKey: ['student-teachers'],
@@ -156,6 +161,7 @@ export default function StudentCalendarPage() {
     [teacherOptions, selectedTeacherId]
   )
   const selectedStudentId = selectedTeacher?.studentId
+  const teacherDisplayName = selectedTeacher?.teacherName || 'Teacher'
 
   const { data: availabilityBlocks } = useQuery({
     queryKey: ['student-calendar-availability', selectedTeacherId],
@@ -180,16 +186,35 @@ export default function StudentCalendarPage() {
     ],
     enabled: !!selectedTeacherId && !!selectedStudentId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('lessons')
-        .select('*')
-        .eq('teacher_id', selectedTeacherId)
-        .eq('student_id', selectedStudentId)
-        .gte('start_time', visibleRange.start.toISOString())
-        .lte('end_time', visibleRange.end.toISOString())
-        .order('start_time', { ascending: true })
-      if (error) throw error
-      return data as Lesson[]
+      const [primary, group] = await Promise.all([
+        supabase
+          .from('lessons')
+          .select('*')
+          .eq('teacher_id', selectedTeacherId)
+          .eq('student_id', selectedStudentId)
+          .gte('start_time', visibleRange.start.toISOString())
+          .lte('end_time', visibleRange.end.toISOString())
+          .order('start_time', { ascending: true }),
+        supabase
+          .from('lessons')
+          .select('*, lesson_students!inner(student_id)')
+          .eq('teacher_id', selectedTeacherId)
+          .in('lesson_students.student_id', [selectedStudentId])
+          .gte('start_time', visibleRange.start.toISOString())
+          .lte('end_time', visibleRange.end.toISOString())
+          .order('start_time', { ascending: true }),
+      ])
+
+      if (primary.error) throw primary.error
+      if (group.error) throw group.error
+
+      const combined = [
+        ...(((primary.data || []) as unknown) as Lesson[]),
+        ...(((group.data || []) as unknown) as Lesson[]),
+      ]
+      const deduped = Array.from(new Map(combined.map((l) => [l.id, l])).values())
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+      return deduped
     },
   })
 
@@ -234,7 +259,7 @@ export default function StudentCalendarPage() {
       const colors = statusColors[lesson.status] || statusColors.pending
       return {
         id: lesson.id,
-        title: lesson.title,
+        title: teacherDisplayName,
         start: lesson.start_time,
         end: lesson.end_time,
         backgroundColor: colors.bg,
@@ -246,7 +271,7 @@ export default function StudentCalendarPage() {
         },
       }
     })
-  }, [lessons])
+  }, [lessons, teacherDisplayName])
 
   const slotEvents = useMemo(() => {
     if (!bookableSlots) return []
@@ -445,7 +470,7 @@ export default function StudentCalendarPage() {
         </div>
       </div>
 
-      <div className="flex-1 px-6 pb-6 pt-2 overflow-auto">
+      <div ref={containerRef} className="flex-1 px-6 pb-6 pt-2 overflow-auto">
         <div className="h-full">
           <FullCalendar
             ref={calendarRef}
@@ -468,20 +493,17 @@ export default function StudentCalendarPage() {
           eventContent={(eventInfo) => {
             if (eventInfo.event.display === 'background') return null
             const type = eventInfo.event.extendedProps.type as string | undefined
+            const isTimeGridView = eventInfo.view.type.startsWith('timeGrid')
 
             if (type === 'slot') {
               return (
-                <div className="flex h-full flex-col justify-between p-2 text-left">
-                  <div>
-                    <p className="text-sm font-medium leading-tight">{eventInfo.event.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {format(new Date(eventInfo.event.start!), 'h:mm a')} -{' '}
-                      {format(new Date(eventInfo.event.end!), 'h:mm a')}
-                    </p>
-                  </div>
+                <div className="flex h-full flex-col gap-1 rounded-sm p-1.5 text-left">
+                  <p className="text-sm font-medium leading-tight text-foreground truncate">
+                    {eventInfo.event.title}
+                  </p>
                   <Button
                     size="sm"
-                    className="mt-1"
+                    className="mt-auto h-6 w-full px-2 text-[11px]"
                     onClick={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
@@ -514,18 +536,14 @@ export default function StudentCalendarPage() {
               )
 
             return (
-              <div className="flex h-full w-full flex-col justify-between p-2 text-left">
-                <div>
-                  <p className="text-sm font-medium leading-tight">{eventInfo.event.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(new Date(eventInfo.event.start!), 'h:mm a')} -{' '}
-                    {format(new Date(eventInfo.event.end!), 'h:mm a')}
-                  </p>
-                </div>
-                {joinVisible && (
+              <div className="flex h-full w-full flex-col gap-1 rounded-sm p-1.5 text-left">
+                <p className="text-sm font-medium leading-tight text-foreground truncate">
+                  {eventInfo.event.title}
+                </p>
+                {joinVisible && isTimeGridView && (
                   <Button
                     size="sm"
-                    className="mt-1"
+                    className="mt-auto h-6 w-full px-2 text-[11px]"
                     onClick={(e) => {
                       e.preventDefault()
                       e.stopPropagation()

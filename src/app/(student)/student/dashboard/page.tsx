@@ -21,6 +21,7 @@ import {
 import { format, isToday, isTomorrow } from 'date-fns'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import type { Lesson, Profile, Student } from '@/types/database'
+import { isJoinWindowOpen } from '@/lib/lesson-join'
 
 function getRelativeDay(date: Date) {
   if (isToday(date)) return 'Today'
@@ -97,40 +98,76 @@ export default async function StudentDashboardPage() {
 
   let nextLesson: Lesson | null = null
   if (studentIds.length > 0) {
-    const { data: nextLessonRows, error: nextLessonError } = await supabase
-      .from('lessons')
-      .select('*')
-      .in('student_id', studentIds)
-      .eq('status', 'confirmed')
-      .gt('start_time', nowIso)
-      .order('start_time', { ascending: true })
-      .limit(1)
+    const [primaryNext, groupNext] = await Promise.all([
+      supabase
+        .from('lessons')
+        .select('*')
+        .in('student_id', studentIds)
+        .eq('status', 'confirmed')
+        .gt('start_time', nowIso)
+        .order('start_time', { ascending: true })
+        .limit(5),
+      supabase
+        .from('lessons')
+        .select('*, lesson_students!inner(student_id)')
+        .in('lesson_students.student_id', studentIds)
+        .eq('status', 'confirmed')
+        .gt('start_time', nowIso)
+        .order('start_time', { ascending: true })
+        .limit(5),
+    ])
 
-    if (nextLessonError) {
-      console.error('Error loading next lesson', nextLessonError)
+    if (primaryNext.error) {
+      console.error('Error loading next lesson (primary)', primaryNext.error)
+    }
+    if (groupNext.error) {
+      console.error('Error loading next lesson (group)', groupNext.error)
     }
 
-    nextLesson = nextLessonError ? null : (nextLessonRows && nextLessonRows[0]) || null
+    const combined = [
+      ...(primaryNext.error ? [] : ((primaryNext.data || []) as Lesson[])),
+      ...(groupNext.error ? [] : ((groupNext.data || []) as Lesson[])),
+    ]
+    const deduped = Array.from(new Map(combined.map((l) => [l.id, l])).values())
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    nextLesson = deduped[0] || null
   }
 
   let upcomingLessons: Lesson[] = []
   if (studentIds.length > 0) {
-    const { data: upcomingLessonRows, error: upcomingLessonsError } = await supabase
-      .from('lessons')
-      .select('*')
-      .in('student_id', studentIds)
-      .in('status', ['pending', 'confirmed'])
-      .gte('start_time', nowIso)
-      .order('start_time', { ascending: true })
-      .limit(5)
+    const [primaryUpcoming, groupUpcoming] = await Promise.all([
+      supabase
+        .from('lessons')
+        .select('*')
+        .in('student_id', studentIds)
+        .in('status', ['pending', 'confirmed'])
+        .gte('start_time', nowIso)
+        .order('start_time', { ascending: true })
+        .limit(10),
+      supabase
+        .from('lessons')
+        .select('*, lesson_students!inner(student_id)')
+        .in('lesson_students.student_id', studentIds)
+        .in('status', ['pending', 'confirmed'])
+        .gte('start_time', nowIso)
+        .order('start_time', { ascending: true })
+        .limit(10),
+    ])
 
-    if (upcomingLessonsError) {
-      console.error('Error loading upcoming lessons', upcomingLessonsError)
+    if (primaryUpcoming.error) {
+      console.error('Error loading upcoming lessons (primary)', primaryUpcoming.error)
+    }
+    if (groupUpcoming.error) {
+      console.error('Error loading upcoming lessons (group)', groupUpcoming.error)
     }
 
-    upcomingLessons = upcomingLessonsError
-      ? []
-      : ((upcomingLessonRows || []) as Lesson[])
+    const combined = [
+      ...(primaryUpcoming.error ? [] : ((primaryUpcoming.data || []) as Lesson[])),
+      ...(groupUpcoming.error ? [] : ((groupUpcoming.data || []) as Lesson[])),
+    ]
+    const deduped = Array.from(new Map(combined.map((l) => [l.id, l])).values())
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    upcomingLessons = deduped.slice(0, 5)
   }
 
   const { count: homeworkDueCount = 0, error: homeworkError } =
@@ -160,14 +197,13 @@ export default async function StudentDashboardPage() {
     profile?.full_name?.split(' ')[0] || 'Student'
 
   const nextLessonDate = nextLesson ? new Date(nextLesson.start_time) : null
-  const nextLessonTeacherName = (() => {
-    if (!nextLesson) return ''
-    const student = students.find((s) => s.id === nextLesson?.student_id)
-    if (!student?.teacher_id) return ''
-    return teacherById.get(student.teacher_id)?.full_name || ''
-  })()
-
-  const nextLessonMeetingUrl = nextLesson?.meeting_url
+  const nextLessonTeacherName = nextLesson
+    ? teacherById.get(nextLesson.teacher_id)?.full_name || ''
+    : ''
+  const nextLessonJoinVisible =
+    !!nextLesson &&
+    nextLesson.status === 'confirmed' &&
+    isJoinWindowOpen({ startTime: nextLesson.start_time, endTime: nextLesson.end_time })
 
   return (
     <section className="p-8 max-w-7xl mx-auto space-y-8">
@@ -224,12 +260,10 @@ export default async function StudentDashboardPage() {
                 View calendar
                 <ArrowRight className="w-4 h-4 ml-1" />
               </Link>
-              {nextLessonMeetingUrl && (
-                <Button asChild size="sm" className="ml-auto">
-                  <a href={nextLessonMeetingUrl} target="_blank" rel="noreferrer">
-                    Join Lesson
-                  </a>
-                </Button>
+              {nextLessonJoinVisible && nextLesson && (
+                <Link className="ml-auto" href={`/student/lessons/${nextLesson.id}/call`}>
+                  <Button size="sm">Join Lesson</Button>
+                </Link>
               )}
             </div>
           </CardContent>
@@ -329,10 +363,7 @@ export default async function StudentDashboardPage() {
                   {upcomingLessons.map((lesson) => {
                     const start = new Date(lesson.start_time)
                     const end = new Date(lesson.end_time)
-                    const student = students.find((s) => s.id === lesson.student_id)
-                    const teacherName = student?.teacher_id
-                      ? teacherById.get(student.teacher_id)?.full_name
-                      : undefined
+                    const teacherName = teacherById.get(lesson.teacher_id)?.full_name
 
                     const statusClass =
                       lesson.status === 'confirmed'

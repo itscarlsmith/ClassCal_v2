@@ -24,6 +24,7 @@ import { Plus, Trash2, Clock, Save, Pencil, X, CalendarPlus, CalendarDays } from
 import { format, isPast, startOfDay, isFuture, isToday } from 'date-fns'
 import { cn } from '@/lib/utils'
 import type { AvailabilityBlock } from '@/types/database'
+import { useAppStore } from '@/store/app-store'
 
 const days = [
   { value: 0, label: 'Sunday' },
@@ -46,6 +47,21 @@ const timeSlots = Array.from({ length: 32 }, (_, i) => {
 export default function AvailabilityPage() {
   const supabase = createClient()
   const queryClient = useQueryClient()
+  const { user: storeUser } = useAppStore()
+
+  const { data: authUser } = useQuery({
+    queryKey: ['auth-user'],
+    queryFn: async () => {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser()
+      if (error) throw error
+      return user
+    },
+  })
+
+  const teacherId = authUser?.id || storeUser?.id || null
 
   // State for new weekly block
   const [newBlock, setNewBlock] = useState<{ day: number; start: string; end: string } | null>(null)
@@ -61,13 +77,13 @@ export default function AvailabilityPage() {
 
   // Fetch availability blocks
   const { data: blocks, isLoading } = useQuery({
-    queryKey: ['availability'],
+    queryKey: ['availability', teacherId],
+    enabled: !!teacherId,
     queryFn: async () => {
-      const { data: userData } = await supabase.auth.getUser()
       const { data, error } = await supabase
         .from('availability_blocks')
         .select('*')
-        .eq('teacher_id', userData.user?.id)
+        .eq('teacher_id', teacherId)
         .order('day_of_week')
         .order('start_time')
       if (error) throw error

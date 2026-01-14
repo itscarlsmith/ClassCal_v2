@@ -50,6 +50,7 @@ import { NavItem, NavSubItem } from './nav-item'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/store/app-store'
 import { cn } from '@/lib/utils'
@@ -340,15 +341,34 @@ export function Sidebar() {
         </nav>
       </ScrollArea>
 
-      <div className="border-t border-sidebar-border px-3 py-4">
-        <Button
-          variant="outline"
-          className="w-full justify-start gap-2 text-sm"
-          onClick={handleLogout}
-        >
-          <LogOut className="w-4 h-4" />
-          <span>Sign out</span>
-        </Button>
+      <div className={cn('border-t border-sidebar-border py-4', sidebarCollapsed ? 'px-2' : 'px-3')}>
+        {sidebarCollapsed ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Sign out"
+                className="w-full"
+                onClick={handleLogout}
+              >
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={8}>
+              Sign out
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-2 text-sm"
+            onClick={handleLogout}
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Sign out</span>
+          </Button>
+        )}
       </div>
     </aside>
   )

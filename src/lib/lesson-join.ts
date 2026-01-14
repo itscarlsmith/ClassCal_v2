@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react'
-
 interface JoinWindowArgs {
   startTime: string | Date
   endTime: string | Date
@@ -21,16 +19,5 @@ export function isJoinWindowOpen({
 
   const graceMs = graceMinutes * 60 * 1000
   return now.getTime() >= start.getTime() - graceMs && now.getTime() <= end.getTime() + graceMs
-}
-
-export function useNow(tickMs = 30_000) {
-  const [now, setNow] = useState(() => new Date())
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), tickMs)
-    return () => clearInterval(id)
-  }, [tickMs])
-
-  return now
 }
 
