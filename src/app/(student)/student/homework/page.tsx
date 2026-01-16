@@ -7,14 +7,11 @@ import { useAppStore } from '@/store/app-store'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { format } from 'date-fns'
 import { BookOpenCheck, Clock, CheckCircle, AlertTriangle } from 'lucide-react'
 import type { HomeworkStatus } from '@/types/database'
 import {
-  badgeClassForHomeworkStatus,
-  effectiveHomeworkStatus,
   normalizeHomeworkStatus,
   presentHomeworkStatus,
 } from '@/lib/homework-status'

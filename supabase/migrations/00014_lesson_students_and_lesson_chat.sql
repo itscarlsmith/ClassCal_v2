@@ -1,6 +1,6 @@
 -- ===========================================================
 -- 00014_lesson_students_and_lesson_chat.sql
--- Adds lesson_students join table for multi-student lessons,
+-- Adds lesson_students join table and lesson-scoped chat policies,
 -- extends the existing messages system to support lesson-scoped
 -- conversations, and tightens RLS policies accordingly.
 -- ===========================================================

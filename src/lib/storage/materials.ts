@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 const MATERIALS_BUCKET = 'materials'
 
-export const ALLOWED_MATERIAL_EXTENSIONS = [
+const ALLOWED_MATERIAL_EXTENSIONS = [
   'pdf',
   'txt',
   'doc',
@@ -21,7 +21,7 @@ type AllowedExtension = (typeof ALLOWED_MATERIAL_EXTENSIONS)[number]
 
 export type UploadProgressState = 'idle' | 'creating' | 'validating' | 'uploading' | 'saving'
 
-export interface MaterialObjectPathArgs {
+interface MaterialObjectPathArgs {
   teacherId: string
   materialId: string
   filename: string
@@ -50,7 +50,7 @@ export function isAllowedMaterialFilename(filename: string): boolean {
   return Boolean(ext && ALLOWED_MATERIAL_EXTENSIONS.includes(ext as AllowedExtension))
 }
 
-export function materialObjectPath({ teacherId, materialId, filename }: MaterialObjectPathArgs): string {
+function materialObjectPath({ teacherId, materialId, filename }: MaterialObjectPathArgs): string {
   if (!teacherId || !materialId) {
     throw new Error('Missing teacher or material identifier for storage path.')
   }

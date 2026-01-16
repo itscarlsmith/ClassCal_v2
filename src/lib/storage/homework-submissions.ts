@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 const HOMEWORK_SUBMISSIONS_BUCKET = 'homework-submissions'
 
-export interface HomeworkSubmissionPathArgs {
+interface HomeworkSubmissionPathArgs {
   studentId: string
   homeworkId: string
   submissionId: string
@@ -19,7 +19,7 @@ export interface CreateSubmissionSignedUrlArgs {
   expiresIn?: number
 }
 
-export function homeworkSubmissionObjectPath({
+function homeworkSubmissionObjectPath({
   studentId,
   homeworkId,
   submissionId,

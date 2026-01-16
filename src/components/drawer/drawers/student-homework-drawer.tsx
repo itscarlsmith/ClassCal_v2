@@ -26,6 +26,10 @@ import { isHomeworkOverdue, normalizeHomeworkStatus, presentHomeworkStatus } fro
 
 type MaterialSummary = Pick<Material, 'id' | 'title' | 'type' | 'file_url' | 'external_url'>
 
+type MaterialRow = {
+  material: MaterialSummary | MaterialSummary[] | null
+}
+
 interface StudentHomeworkDrawerProps {
   id: string | null
   data?: Record<string, unknown>
@@ -81,8 +85,9 @@ export function StudentHomeworkDrawer({ id }: StudentHomeworkDrawerProps) {
         .select('material:materials(id, title, type, file_url, external_url)')
         .eq('lesson_id', homework?.lesson_id as string)
       if (error) throw error
-      return (data || [])
-        .map((row) => row.material as unknown as MaterialSummary | null)
+      const rows = (data || []) as MaterialRow[]
+      return rows
+        .map((row) => (Array.isArray(row.material) ? row.material[0] : row.material))
         .filter((material): material is MaterialSummary => !!material)
     },
   })
@@ -96,8 +101,9 @@ export function StudentHomeworkDrawer({ id }: StudentHomeworkDrawerProps) {
         .select('material:materials(id, title, type, file_url, external_url)')
         .eq('homework_id', homework?.id as string)
       if (error) throw error
-      return (data || [])
-        .map((row) => row.material as unknown as MaterialSummary | null)
+      const rows = (data || []) as MaterialRow[]
+      return rows
+        .map((row) => (Array.isArray(row.material) ? row.material[0] : row.material))
         .filter((material): material is MaterialSummary => !!material)
     },
   })
@@ -188,14 +194,18 @@ export function StudentHomeworkDrawer({ id }: StudentHomeworkDrawerProps) {
       queryClient.invalidateQueries({ queryKey: ['student-homework-submission'] })
     },
     onError: (error: unknown) => {
-      console.error('Homework submit failed:', error)
-      const err = error as any
+      const err = error as {
+        message?: unknown
+        details?: unknown
+        hint?: unknown
+        code?: unknown
+      }
       const message =
-        (typeof err?.message === 'string' && err.message) ||
-        (typeof err?.details === 'string' && err.details) ||
-        (typeof err?.hint === 'string' && err.hint) ||
+        (typeof err.message === 'string' && err.message) ||
+        (typeof err.details === 'string' && err.details) ||
+        (typeof err.hint === 'string' && err.hint) ||
         (error instanceof Error ? error.message : String(error))
-      const code = typeof err?.code === 'string' ? err.code : null
+      const code = typeof err.code === 'string' ? err.code : null
       toast.error(code ? `${message} (${code})` : message || 'Failed to submit homework')
     },
   })
@@ -209,8 +219,7 @@ export function StudentHomeworkDrawer({ id }: StudentHomeworkDrawerProps) {
         expiresIn: 60 * 10,
       })
       window.open(signedUrl, '_blank', 'noopener,noreferrer')
-    } catch (error) {
-      console.error(error)
+    } catch {
       toast.error('Unable to open file')
     } finally {
       setOpeningSubmissionPath(null)
@@ -234,8 +243,7 @@ export function StudentHomeworkDrawer({ id }: StudentHomeworkDrawerProps) {
         expiresIn: 60 * 10,
       })
       window.open(signedUrl, '_blank', 'noopener,noreferrer')
-    } catch (error) {
-      console.error(error)
+    } catch {
       toast.error('Unable to open material')
     } finally {
       setMaterialOpeningId(null)

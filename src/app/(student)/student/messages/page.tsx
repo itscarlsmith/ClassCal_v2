@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Send, Search, MessageSquare } from 'lucide-react'
@@ -19,6 +18,18 @@ type TeacherContact = {
   full_name: string
   avatar_url: string | null
   email: string | null
+}
+
+type TeacherProfileRow = {
+  id: string
+  full_name: string | null
+  avatar_url: string | null
+  email: string | null
+}
+
+type StudentTeacherRow = {
+  teacher_id: string | null
+  teacher: TeacherProfileRow | TeacherProfileRow[] | null
 }
 
 type MessageRow = {
@@ -58,25 +69,38 @@ export default function StudentMessagesPage() {
         )
         .eq('user_id', userData.user.id)
       if (error) throw error
+      const rows = (data || []) as StudentTeacherRow[]
       const unique = new Map<string, TeacherContact>()
-      ;(data || []).forEach((row) => {
+      rows.forEach((row) => {
         if (!row.teacher_id || unique.has(row.teacher_id)) return
-        const teacher = (row as any).teacher
-        const teacherProfile =
-          Array.isArray(teacher) ? (teacher[0] as any) : (teacher as any)
+        const teacher = Array.isArray(row.teacher) ? row.teacher[0] : row.teacher
         unique.set(row.teacher_id, {
           teacherId: row.teacher_id,
-          full_name: teacherProfile?.full_name || 'Teacher',
-          avatar_url: teacherProfile?.avatar_url || null,
-          email: teacherProfile?.email || null,
+          full_name: teacher?.full_name || 'Teacher',
+          avatar_url: teacher?.avatar_url || null,
+          email: teacher?.email || null,
         })
       })
       return Array.from(unique.values())
     },
   })
 
+  const resolvedTeacherId = useMemo(() => {
+    const teacherParam = searchParams.get('teacher')
+    if (teacherParam && teacherContacts?.some((t) => t.teacherId === teacherParam)) {
+      return teacherParam
+    }
+    if (selectedTeacher && teacherContacts?.some((t) => t.teacherId === selectedTeacher)) {
+      return selectedTeacher
+    }
+    if (!teacherParam && !selectedTeacher && teacherContacts && teacherContacts.length === 1) {
+      return teacherContacts[0].teacherId
+    }
+    return selectedTeacher
+  }, [searchParams, teacherContacts, selectedTeacher])
+
   const studentProfileId = currentUser?.id ?? null
-  const teacherProfileId = selectedTeacher ?? null
+  const teacherProfileId = resolvedTeacherId ?? null
 
   const { data: messages, isLoading: messagesLoading } = useQuery({
     queryKey: ['student-messages', studentProfileId, teacherProfileId],
@@ -102,16 +126,16 @@ export default function StudentMessagesPage() {
 
   useEffect(() => {
     const markRead = async () => {
-      if (!selectedTeacher || !currentUser?.id) return
+      if (!resolvedTeacherId || !currentUser?.id) return
       await supabase
         .from('messages')
         .update({ is_read: true })
         .eq('recipient_id', currentUser.id)
-        .eq('sender_id', selectedTeacher)
+        .eq('sender_id', resolvedTeacherId)
         .eq('is_read', false)
     }
     markRead()
-  }, [selectedTeacher, currentUser, supabase])
+  }, [resolvedTeacherId, currentUser, supabase])
 
   const sendMessage = useMutation({
     mutationFn: async () => {
@@ -175,17 +199,6 @@ export default function StudentMessagesPage() {
     )
   }, [teacherContacts, searchQuery])
 
-  // Preselect teacher if provided in query params
-  useEffect(() => {
-    const teacherParam = searchParams.get('teacher')
-    if (teacherParam && teacherContacts?.some((t) => t.teacherId === teacherParam)) {
-      setSelectedTeacher(teacherParam)
-    }
-    if (!teacherParam && !selectedTeacher && teacherContacts && teacherContacts.length === 1) {
-      setSelectedTeacher(teacherContacts[0].teacherId)
-    }
-  }, [searchParams, teacherContacts, selectedTeacher])
-
   const formatMessageTime = (date: string) => {
     const d = new Date(date)
     if (isToday(d)) return format(d, 'h:mm a')
@@ -193,7 +206,7 @@ export default function StudentMessagesPage() {
     return format(d, 'MMM d')
   }
 
-  const selectedTeacherContact = teacherContacts?.find((t) => t.teacherId === selectedTeacher)
+  const selectedTeacherContact = teacherContacts?.find((t) => t.teacherId === resolvedTeacherId)
 
   return (
     <div className="h-full flex">
@@ -217,7 +230,7 @@ export default function StudentMessagesPage() {
                 onClick={() => setSelectedTeacher(teacher.teacherId)}
                 className={cn(
                   'w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left',
-                  selectedTeacher === teacher.teacherId && 'bg-muted'
+                  resolvedTeacherId === teacher.teacherId && 'bg-muted'
                 )}
               >
                 <Avatar className="h-10 w-10">
@@ -248,7 +261,7 @@ export default function StudentMessagesPage() {
       </div>
 
       <div className="flex-1 flex flex-col">
-        {selectedTeacher && selectedTeacherContact ? (
+        {resolvedTeacherId && selectedTeacherContact ? (
           <>
             <div className="flex items-center gap-3 p-4 border-b border-border bg-card">
               <Avatar className="h-10 w-10">

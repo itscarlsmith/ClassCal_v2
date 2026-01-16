@@ -19,10 +19,10 @@ export function BookingDrawer({ id, data }: BookingDrawerProps) {
   const { closeDrawer } = useAppStore()
   const queryClient = useQueryClient()
 
+  void id
+
   const slotStartIso = data?.slotStart as string | undefined
   const slotEndIso = data?.slotEnd as string | undefined
-  const teacherId = data?.teacherId as string | undefined
-  const studentId = data?.studentId as string | undefined
   const studentCredits = (data?.studentCredits as number | undefined) ?? 0
   const studentName = (data?.studentName as string | undefined) ?? 'Student'
 

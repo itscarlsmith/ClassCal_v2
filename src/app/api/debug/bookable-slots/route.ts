@@ -27,9 +27,6 @@ export async function GET() {
       maxBookingDays: 30,
     })
 
-    // Log to server console for verification
-    console.log('DEBUG bookable slots', slots)
-
     return NextResponse.json({ slots })
   } catch (error) {
     console.error('Error in debug/bookable-slots', error)

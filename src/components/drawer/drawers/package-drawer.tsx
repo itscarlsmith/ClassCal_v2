@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Drawer, DrawerSection, DrawerFooter } from '../drawer'
 import { useAppStore } from '@/store/app-store'
@@ -25,6 +25,8 @@ export function PackageDrawer({ id, data }: PackageDrawerProps) {
   const supabase = createClient()
   const isNew = !id || id === 'new'
 
+  void data
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -47,20 +49,17 @@ export function PackageDrawer({ id, data }: PackageDrawerProps) {
       return data as PackageType
     },
     enabled: !isNew && !!id,
-  })
-
-  // Update form when package data loads
-  useEffect(() => {
-    if (pkg) {
+    onSuccess: (loadedPackage) => {
+      if (!loadedPackage) return
       setFormData({
-        name: pkg.name,
-        description: pkg.description || '',
-        credits: pkg.credits,
-        price: pkg.price,
-        is_active: pkg.is_active,
+        name: loadedPackage.name,
+        description: loadedPackage.description || '',
+        credits: loadedPackage.credits,
+        price: loadedPackage.price,
+        is_active: loadedPackage.is_active,
       })
-    }
-  }, [pkg])
+    },
+  })
 
   // Save mutation
   const saveMutation = useMutation({
@@ -95,9 +94,8 @@ export function PackageDrawer({ id, data }: PackageDrawerProps) {
       toast.success(isNew ? 'Package created' : 'Package updated')
       if (isNew) closeDrawer()
     },
-    onError: (error) => {
+    onError: () => {
       toast.error('Failed to save package')
-      console.error(error)
     },
   })
 
@@ -112,9 +110,8 @@ export function PackageDrawer({ id, data }: PackageDrawerProps) {
       toast.success('Package deleted')
       closeDrawer()
     },
-    onError: (error) => {
+    onError: () => {
       toast.error('Failed to delete package')
-      console.error(error)
     },
   })
 

@@ -47,13 +47,11 @@ export function StudentSidebar() {
       // ignore
     }
     // only on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [setSidebarCollapsed])
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut()
     if (error) {
-      console.error('Error signing out:', error)
       toast.error('Failed to sign out. Please try again.')
       return
     }
@@ -68,7 +66,7 @@ export function StudentSidebar() {
         sidebarCollapsed ? 'w-16' : 'w-56'
       )}
     >
-      <div className={cn('px-4 py-6 relative', sidebarCollapsed && 'px-2')}>
+      <div className={`relative ${sidebarCollapsed ? 'px-2' : 'px-4'} py-6`}>
         {!sidebarCollapsed && (
           <>
             <p className="text-xs uppercase text-muted-foreground tracking-widest">

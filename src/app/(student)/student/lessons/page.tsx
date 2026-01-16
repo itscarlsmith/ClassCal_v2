@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { format, isAfter } from 'date-fns'
+import { format } from 'date-fns'
 import Link from 'next/link'
 import { Calendar, Clock } from 'lucide-react'
 import type { Lesson } from '@/types/database'
@@ -38,7 +38,7 @@ export default function StudentLessonsPage() {
   const { openDrawer } = useAppStore()
   const router = useRouter()
 
-  const { data: studentRows, isLoading: isStudentsLoading, error: studentError } = useQuery({
+  const { data: studentRows } = useQuery({
     queryKey: ['student-account'],
     queryFn: async () => {
       const { data: userData, error: userError } = await supabase.auth.getUser()
@@ -58,51 +58,42 @@ export default function StudentLessonsPage() {
     queryKey: ['student-lessons', studentIds],
     enabled: studentIds.length > 0,
     queryFn: async () => {
-      const [primary, group] = await Promise.all([
-        supabase
-          .from('lessons')
-          .select('*, teacher:profiles(id, full_name, avatar_url, email)')
-          .in('student_id', studentIds)
-          .order('start_time', { ascending: true }),
-        supabase
-          .from('lessons')
-          .select('*, teacher:profiles(id, full_name, avatar_url, email), lesson_students!inner(student_id)')
-          .in('lesson_students.student_id', studentIds)
-          .order('start_time', { ascending: true }),
-      ])
+      const { data, error } = await supabase
+        .from('lessons')
+        .select('*, teacher:profiles(id, full_name, avatar_url, email)')
+        .in('student_id', studentIds)
+        .order('start_time', { ascending: true })
 
-      if (primary.error) throw primary.error
-      if (group.error) throw group.error
+      if (error) throw error
 
-      const combined = [
-        ...((primary.data || []) as LessonWithTeacher[]),
-        ...((group.data || []) as LessonWithTeacher[]),
-      ]
-      const deduped = Array.from(new Map(combined.map((l) => [l.id, l])).values())
-        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-      return deduped
+      return ((data || []) as LessonWithTeacher[]).sort(
+        (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+      )
     },
   })
 
-  const now = new Date()
   const upcomingLessons = useMemo(
-    () =>
-      lessons
-        ?.filter(
+    () => {
+      const now = new Date()
+      return (lessons || [])
+        .filter(
           (lesson) =>
             new Date(lesson.start_time) >= now &&
             (lesson.status === 'pending' || lesson.status === 'confirmed')
         )
-        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()) || [],
-    [lessons, now]
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    },
+    [lessons]
   )
 
   const pastLessons = useMemo(
-    () =>
-      lessons
-        ?.filter((lesson) => new Date(lesson.start_time) < now)
-        .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime()) || [],
-    [lessons, now]
+    () => {
+      const now = new Date()
+      return (lessons || [])
+        .filter((lesson) => new Date(lesson.start_time) < now)
+        .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())
+    },
+    [lessons]
   )
 
   const liveNow = useNow(30_000)

@@ -1,6 +1,6 @@
 -- ===========================================================
--- 00015_group_lesson_credit_deduction.sql
--- Deduct credits for ALL lesson participants (group lessons)
+-- 00015_lesson_credit_deduction.sql
+-- Deduct credits for all lesson_students rows
 -- ===========================================================
 
 -- When a lesson is completed, deduct credits from every student participating

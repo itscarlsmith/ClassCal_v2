@@ -21,11 +21,9 @@ import {
   TrendingUp,
   CreditCard,
   Package,
-  ArrowUpRight,
-  ArrowDownRight,
 } from 'lucide-react'
 import { format } from 'date-fns'
-import type { Payment, Package as PackageType } from '@/types/database'
+import type { Package as PackageType } from '@/types/database'
 
 export default function FinancePage() {
   const { openDrawer } = useAppStore()

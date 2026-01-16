@@ -8,9 +8,8 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { Zap, Bell, BookOpen, CreditCard, Save } from 'lucide-react'
+import { Zap, Bell, BookOpen, CreditCard } from 'lucide-react'
 import type { AutomationRule } from '@/types/database'
 
 export default function AutomationPage() {

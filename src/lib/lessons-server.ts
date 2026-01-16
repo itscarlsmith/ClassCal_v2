@@ -32,7 +32,7 @@ export async function checkLessonOverlap({
     ? [studentIds]
     : []
 
-  // 1) Conflicts based on the primary lesson participants (teacher_id and lessons.student_id)
+  // 1) Conflicts based on the primary lesson teacher/student
   const participantFilters: string[] = []
   if (teacherId) participantFilters.push(`teacher_id.eq.${teacherId}`)
   if (studentIdList.length > 0) {
@@ -63,31 +63,6 @@ export async function checkLessonOverlap({
 
     primaryConflict = (count ?? 0) > 0
     if (primaryConflict) return { hasConflict: true }
-  }
-
-  // 2) Conflicts for group lessons (additional participants via lesson_students)
-  // If a student participates in a lesson via lesson_students, lessons.student_id may be different.
-  if (studentIdList.length > 0) {
-    const groupQuery = supabase
-      .from('lesson_students')
-      // join to lessons to filter by time/status
-      .select('lesson_id, lessons!inner(id)', { count: 'exact', head: true })
-      .in('student_id', studentIdList)
-      .in('lessons.status', ['pending', 'confirmed'])
-      .lt('lessons.start_time', endIso)
-      .gt('lessons.end_time', startIso)
-
-    if (excludeLessonId) {
-      groupQuery.neq('lesson_id', excludeLessonId)
-    }
-
-    const { count, error } = await groupQuery
-    if (error) {
-      console.error('checkLessonOverlap failed (group)', error)
-      return { hasConflict: false, error }
-    }
-
-    if ((count ?? 0) > 0) return { hasConflict: true }
   }
 
   return { hasConflict: false }

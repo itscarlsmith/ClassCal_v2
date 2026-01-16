@@ -42,9 +42,4 @@ export function getMaterialTypeLabel(type?: string | null): string {
   return MATERIAL_TYPE_LABELS[normalized]
 }
 
-export const MATERIAL_TYPE_OPTIONS = MATERIAL_TYPE_VALUES.map((value) => ({
-  value,
-  label: MATERIAL_TYPE_LABELS[value],
-}))
-
 

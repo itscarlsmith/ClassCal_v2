@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Drawer, DrawerSection, DrawerFooter } from '../drawer'
 import { useAppStore } from '@/store/app-store'
@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import {
   Select,
   SelectContent,
@@ -20,13 +19,10 @@ import {
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import {
-  CreditCard,
   Trash2,
   Save,
-  DollarSign,
-  Package,
 } from 'lucide-react'
-import type { Payment, Package as PackageType } from '@/types/database'
+import type { Package as PackageType } from '@/types/database'
 
 interface PaymentDrawerProps {
   id: string | null
@@ -63,6 +59,18 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
       return data
     },
     enabled: !isNew && !!id,
+    onSuccess: (loadedPayment) => {
+      if (!loadedPayment) return
+      setFormData({
+        student_id: loadedPayment.student_id,
+        package_id: loadedPayment.package_id || '',
+        amount: loadedPayment.amount,
+        credits_purchased: loadedPayment.credits_purchased,
+        status: loadedPayment.status,
+        payment_method: loadedPayment.payment_method || 'card',
+        transaction_id: loadedPayment.transaction_id || '',
+      })
+    },
   })
 
   // Fetch students for dropdown
@@ -95,21 +103,6 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
     },
     enabled: !!user?.id,
   })
-
-  // Update form when payment data loads
-  useEffect(() => {
-    if (payment) {
-      setFormData({
-        student_id: payment.student_id,
-        package_id: payment.package_id || '',
-        amount: payment.amount,
-        credits_purchased: payment.credits_purchased,
-        status: payment.status,
-        payment_method: payment.payment_method || 'card',
-        transaction_id: payment.transaction_id || '',
-      })
-    }
-  }, [payment])
 
   // When package is selected, auto-fill amount and credits
   const handlePackageChange = (packageId: string) => {
@@ -202,9 +195,8 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
       toast.success(isNew ? 'Payment recorded' : 'Payment updated')
       if (isNew) closeDrawer()
     },
-    onError: (error) => {
+    onError: () => {
       toast.error('Failed to save payment')
-      console.error(error)
     },
   })
 
@@ -219,9 +211,8 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
       toast.success('Payment deleted')
       closeDrawer()
     },
-    onError: (error) => {
+    onError: () => {
       toast.error('Failed to delete payment')
-      console.error(error)
     },
   })
 

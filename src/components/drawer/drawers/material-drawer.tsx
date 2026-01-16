@@ -87,6 +87,8 @@ export function MaterialDrawer({ id, data }: MaterialDrawerProps) {
   const supabase = createClient()
   const isNew = !id || id === 'new'
 
+  void data
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -168,12 +170,10 @@ export function MaterialDrawer({ id, data }: MaterialDrawerProps) {
               search: filename,
             })
           if (error) {
-            console.error('Failed to verify material file', error)
             return true
           }
           return data?.some((item) => item.name === filename) ?? false
-        } catch (error) {
-          console.error('Failed to verify material file', error)
+        } catch {
           return true
         }
       }
@@ -199,7 +199,6 @@ export function MaterialDrawer({ id, data }: MaterialDrawerProps) {
         }
       } catch (error) {
         if (!isCancelled) {
-          console.error('Failed to load material preview', error)
           const message =
             error instanceof Error ? error.message : 'Unable to load preview'
           setPreviewError(message)
@@ -371,7 +370,6 @@ export function MaterialDrawer({ id, data }: MaterialDrawerProps) {
         error instanceof Error ? error.message : 'Failed to save material'
       setUploadError(message)
       toast.error(message)
-      console.error(error)
     },
     onSettled: () => {
       setUploadState('idle')
@@ -403,9 +401,8 @@ export function MaterialDrawer({ id, data }: MaterialDrawerProps) {
       toast.success('Material deleted')
       closeDrawer()
     },
-    onError: (error) => {
+    onError: () => {
       toast.error('Failed to delete material')
-      console.error(error)
     },
   })
 
@@ -564,6 +561,7 @@ export function MaterialDrawer({ id, data }: MaterialDrawerProps) {
                     ) : isImagePreview ? (
                       <div className="space-y-2">
                         <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="block">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={previewUrl}
                             alt={filename || 'Material preview'}

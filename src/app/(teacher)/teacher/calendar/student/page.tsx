@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -11,7 +11,6 @@ import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { toast } from 'sonner'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { format, addWeeks, subWeeks } from 'date-fns'
 import {
@@ -37,7 +36,7 @@ export default function StudentCalendarPage() {
   const [showTeacherAvailability, setShowTeacherAvailability] = useState(true)
 
   // Fetch current student and their teacher
-  const { data: studentContext, isLoading: isContextLoading } = useQuery({
+  const { data: studentContext } = useQuery({
     queryKey: ['student-context'],
     queryFn: async () => {
       const { data: userData, error: userError } = await supabase.auth.getUser()
@@ -199,34 +198,24 @@ export default function StudentCalendarPage() {
     }
   }
 
-  const updateTitle = () => {
-    const api = calendarRef.current?.getApi()
-    if (api) {
-      setCurrentTitle(api.view.title)
-    }
+  const handleDatesSet = (arg: DatesSetArg) => {
+    setCurrentTitle(arg.view.title)
   }
 
   const handlePrev = () => {
     const api = calendarRef.current?.getApi()
     api?.prev()
-    updateTitle()
   }
 
   const handleNext = () => {
     const api = calendarRef.current?.getApi()
     api?.next()
-    updateTitle()
   }
 
   const handleToday = () => {
     const api = calendarRef.current?.getApi()
     api?.today()
-    updateTitle()
   }
-
-  useEffect(() => {
-    updateTitle()
-  }, [])
 
   return (
     <div className="h-full flex flex-col">
@@ -291,7 +280,7 @@ export default function StudentCalendarPage() {
             eventClick={handleEventClick}
             height="100%"
             datesSet={(arg: DatesSetArg) => {
-              updateTitle()
+              handleDatesSet(arg)
               setVisibleRange({ start: arg.start, end: arg.end })
             }}
             eventContent={(eventInfo) => {

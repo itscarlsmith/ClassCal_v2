@@ -13,34 +13,6 @@ import {
   Zap, 
   Settings, 
   HelpCircle,
-  CalendarDays,
-  CalendarCheck,
-  CalendarClock,
-  RefreshCw,
-  Video,
-  FileText,
-  ClipboardList,
-  UserPlus,
-  TrendingUp,
-  CreditCard,
-  Inbox,
-  Users2,
-  FolderPlus,
-  FileQuestion,
-  Layers,
-  Receipt,
-  Wallet,
-  Package,
-  ArrowRightLeft,
-  BarChart3,
-  Bell,
-  User,
-  Link2,
-  Keyboard,
-  Sparkles,
-  LifeBuoy,
-  BookOpenCheck,
-  Clock,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -130,8 +102,7 @@ export function Sidebar() {
       // ignore
     }
     // only on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [setSidebarCollapsed])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -341,7 +312,9 @@ export function Sidebar() {
         </nav>
       </ScrollArea>
 
-      <div className={cn('border-t border-sidebar-border py-4', sidebarCollapsed ? 'px-2' : 'px-3')}>
+      <div
+        className={`border-t border-sidebar-border ${sidebarCollapsed ? 'px-2' : 'px-3'} py-4`}
+      >
         {sidebarCollapsed ? (
           <Tooltip>
             <TooltipTrigger asChild>

@@ -12,15 +12,15 @@ export function CallSidebarBehavior() {
   const initialStateRef = useRef<boolean>(sidebarCollapsed)
 
   useEffect(() => {
-    if (!initialStateRef.current) {
+    const initialCollapsed = initialStateRef.current
+    if (!initialCollapsed) {
       setSidebarCollapsed(true)
     }
 
     return () => {
-      setSidebarCollapsed(initialStateRef.current)
+      setSidebarCollapsed(initialCollapsed)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [setSidebarCollapsed])
 
   return null
 }

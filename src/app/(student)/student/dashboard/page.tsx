@@ -98,76 +98,42 @@ export default async function StudentDashboardPage() {
 
   let nextLesson: Lesson | null = null
   if (studentIds.length > 0) {
-    const [primaryNext, groupNext] = await Promise.all([
-      supabase
-        .from('lessons')
-        .select('*')
-        .in('student_id', studentIds)
-        .eq('status', 'confirmed')
-        .gt('start_time', nowIso)
-        .order('start_time', { ascending: true })
-        .limit(5),
-      supabase
-        .from('lessons')
-        .select('*, lesson_students!inner(student_id)')
-        .in('lesson_students.student_id', studentIds)
-        .eq('status', 'confirmed')
-        .gt('start_time', nowIso)
-        .order('start_time', { ascending: true })
-        .limit(5),
-    ])
+    const { data: nextRows, error: nextError } = await supabase
+      .from('lessons')
+      .select('*')
+      .in('student_id', studentIds)
+      .eq('status', 'confirmed')
+      .gt('start_time', nowIso)
+      .order('start_time', { ascending: true })
+      .limit(5)
 
-    if (primaryNext.error) {
-      console.error('Error loading next lesson (primary)', primaryNext.error)
+    if (nextError) {
+      console.error('Error loading next lesson', nextError)
+    } else if (nextRows && nextRows.length > 0) {
+      nextLesson = (nextRows as Lesson[]).sort(
+        (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+      )[0]
     }
-    if (groupNext.error) {
-      console.error('Error loading next lesson (group)', groupNext.error)
-    }
-
-    const combined = [
-      ...(primaryNext.error ? [] : ((primaryNext.data || []) as Lesson[])),
-      ...(groupNext.error ? [] : ((groupNext.data || []) as Lesson[])),
-    ]
-    const deduped = Array.from(new Map(combined.map((l) => [l.id, l])).values())
-      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-    nextLesson = deduped[0] || null
   }
 
   let upcomingLessons: Lesson[] = []
   if (studentIds.length > 0) {
-    const [primaryUpcoming, groupUpcoming] = await Promise.all([
-      supabase
-        .from('lessons')
-        .select('*')
-        .in('student_id', studentIds)
-        .in('status', ['pending', 'confirmed'])
-        .gte('start_time', nowIso)
-        .order('start_time', { ascending: true })
-        .limit(10),
-      supabase
-        .from('lessons')
-        .select('*, lesson_students!inner(student_id)')
-        .in('lesson_students.student_id', studentIds)
-        .in('status', ['pending', 'confirmed'])
-        .gte('start_time', nowIso)
-        .order('start_time', { ascending: true })
-        .limit(10),
-    ])
+    const { data: upcomingRows, error: upcomingError } = await supabase
+      .from('lessons')
+      .select('*')
+      .in('student_id', studentIds)
+      .in('status', ['pending', 'confirmed'])
+      .gte('start_time', nowIso)
+      .order('start_time', { ascending: true })
+      .limit(10)
 
-    if (primaryUpcoming.error) {
-      console.error('Error loading upcoming lessons (primary)', primaryUpcoming.error)
+    if (upcomingError) {
+      console.error('Error loading upcoming lessons', upcomingError)
+    } else {
+      upcomingLessons = ((upcomingRows || []) as Lesson[])
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+        .slice(0, 5)
     }
-    if (groupUpcoming.error) {
-      console.error('Error loading upcoming lessons (group)', groupUpcoming.error)
-    }
-
-    const combined = [
-      ...(primaryUpcoming.error ? [] : ((primaryUpcoming.data || []) as Lesson[])),
-      ...(groupUpcoming.error ? [] : ((groupUpcoming.data || []) as Lesson[])),
-    ]
-    const deduped = Array.from(new Map(combined.map((l) => [l.id, l])).values())
-      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-    upcomingLessons = deduped.slice(0, 5)
   }
 
   const { count: homeworkDueCount = 0, error: homeworkError } =

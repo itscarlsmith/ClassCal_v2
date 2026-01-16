@@ -1,7 +1,6 @@
 'use client'
 
 import { useAppStore } from '@/store/app-store'
-import { Drawer } from './drawer'
 import { StudentDrawer } from './drawers/student-drawer'
 import { LessonDrawer } from './drawers/lesson-drawer'
 import { BookingDrawer } from './drawers/booking-drawer'

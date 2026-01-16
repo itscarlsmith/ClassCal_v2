@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Drawer, DrawerSection, DrawerFooter } from '../drawer'
 import { useAppStore } from '@/store/app-store'
@@ -35,7 +35,7 @@ import {
 } from '@/components/ui/command'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
-import { FileText, Trash2, Save, CheckCircle, XCircle, Check, ChevronsUpDown, X } from 'lucide-react'
+import { FileText, Save, CheckCircle, XCircle, Check, ChevronsUpDown, X } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LessonVideoCall } from '@/components/lesson/lesson-video-call'
 import { LessonChat } from '@/components/lesson/lesson-chat'
@@ -45,19 +45,6 @@ import type { Lesson, Student, LessonStatus, Material } from '@/types/database'
 interface LessonDrawerProps {
   id: string | null
   data?: Record<string, unknown>
-}
-
-type LessonParticipant = {
-  student_id: string
-  student: Pick<Student, 'id' | 'full_name' | 'email' | 'avatar_url'> | null
-}
-
-type LessonParticipantRow = {
-  student_id: string
-  student:
-    | { id: string; full_name: string; email: string; avatar_url: string | null }
-    | { id: string; full_name: string; email: string; avatar_url: string | null }[]
-    | null
 }
 
 export function LessonDrawer({ id, data }: LessonDrawerProps) {
@@ -86,13 +73,9 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
     credits_used: 1,
   })
   const [preAgreed, setPreAgreed] = useState(false)
-  const [groupLesson, setGroupLesson] = useState(false)
-  const [additionalStudentIds, setAdditionalStudentIds] = useState<string[]>([])
-  const [additionalStudentsOpen, setAdditionalStudentsOpen] = useState(false)
   const [isRecurring, setIsRecurring] = useState(false)
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([])
   const [materialsPopoverOpen, setMaterialsPopoverOpen] = useState(false)
-  const [participantToAdd, setParticipantToAdd] = useState('')
 
   // Fetch lesson data
   const { data: lesson, isLoading } = useQuery({
@@ -108,6 +91,19 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
       return data as Lesson & { student: Pick<Student, 'id' | 'full_name' | 'email' | 'avatar_url'> }
     },
     enabled: !isNew && !!id,
+    onSuccess: (loadedLesson) => {
+      if (!loadedLesson) return
+      setFormData({
+        student_id: loadedLesson.student_id,
+        title: loadedLesson.title,
+        description: loadedLesson.description || '',
+        start_time: toLocalDateTimeString(new Date(loadedLesson.start_time)),
+        end_time: toLocalDateTimeString(new Date(loadedLesson.end_time)),
+        status: loadedLesson.status,
+        credits_used: loadedLesson.credits_used,
+      })
+      setIsRecurring(loadedLesson.is_recurring || false)
+    },
   })
 
   // Fetch students for dropdown
@@ -162,7 +158,7 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
   })
 
   // Fetch lesson materials (for existing lessons)
-  const { data: lessonMaterials } = useQuery({
+  useQuery({
     queryKey: ['lesson-materials', id],
     queryFn: async () => {
       if (isNew) return []
@@ -174,65 +170,12 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
       return data.map((lm) => lm.material_id)
     },
     enabled: !isNew && !!id,
-  })
-
-  const { data: lessonParticipants, isLoading: participantsLoading } = useQuery({
-    queryKey: ['lesson-participants', id],
-    enabled: !isNew && !!id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('lesson_students')
-        .select('student_id, student:students(id, full_name, email, avatar_url)')
-        .eq('lesson_id', id)
-      if (error) throw error
-      const rows = (data || []) as LessonParticipantRow[]
-      return rows.map((row) => {
-        const student = Array.isArray(row.student) ? row.student?.[0] : row.student
-        return {
-          student_id: row.student_id,
-          student: student ?? null,
-        } satisfies LessonParticipant
-      })
+    onSuccess: (materials) => {
+      if (materials) {
+        setSelectedMaterials(materials)
+      }
     },
   })
-
-  const availableParticipants = useMemo(() => {
-    if (!students) return []
-    const existingIds = new Set((lessonParticipants || []).map((participant) => participant.student_id))
-    return students.filter((student) => !existingIds.has(student.id))
-  }, [students, lessonParticipants])
-
-  // Update form when lesson data loads
-  useEffect(() => {
-    if (lesson) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setFormData({
-        student_id: lesson.student_id,
-        title: lesson.title,
-        description: lesson.description || '',
-        start_time: toLocalDateTimeString(new Date(lesson.start_time)),
-        end_time: toLocalDateTimeString(new Date(lesson.end_time)),
-        status: lesson.status,
-        credits_used: lesson.credits_used,
-      })
-      setIsRecurring(lesson.is_recurring || false)
-    }
-  }, [lesson])
-
-  // Update selected materials when lesson materials load
-  useEffect(() => {
-    if (lessonMaterials) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectedMaterials(lessonMaterials)
-    }
-  }, [lessonMaterials])
-
-  // When primary student changes, ensure it's not also selected as an additional participant
-  useEffect(() => {
-    if (!groupLesson) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAdditionalStudentIds((prev) => prev.filter((id) => id !== formData.student_id))
-  }, [groupLesson, formData.student_id])
 
   // Save mutation
   const saveMutation = useMutation({
@@ -257,7 +200,6 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             student_id: payload.student_id,
-            additional_student_ids: groupLesson ? additionalStudentIds : [],
             title: payload.title,
             description: payload.description,
             start_time: payload.start_time,
@@ -342,7 +284,6 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
     onError: (error) => {
       const message = error instanceof Error ? error.message : 'Failed to save lesson'
       toast.error(message)
-      console.error(error)
     },
   })
 
@@ -376,46 +317,6 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
     },
   })
 
-  const addParticipantMutation = useMutation({
-    mutationFn: async (studentId: string) => {
-      if (!id) throw new Error('Missing lesson id')
-      const { error } = await supabase.from('lesson_students').insert({
-        lesson_id: id,
-        student_id: studentId,
-      })
-      if (error) throw error
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lesson-participants', id] })
-      toast.success('Participant added')
-      setParticipantToAdd('')
-    },
-    onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Unable to add participant'
-      toast.error(message)
-    },
-  })
-
-  const removeParticipantMutation = useMutation({
-    mutationFn: async (studentId: string) => {
-      if (!id) throw new Error('Missing lesson id')
-      const { error } = await supabase
-        .from('lesson_students')
-        .delete()
-        .eq('lesson_id', id)
-        .eq('student_id', studentId)
-      if (error) throw error
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lesson-participants', id] })
-      toast.success('Participant removed')
-    },
-    onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Unable to remove participant'
-      toast.error(message)
-    },
-  })
-
   const handleSave = () => {
     if (!formData.student_id || !formData.title || !formData.start_time || !formData.end_time) {
       toast.error('Please fill in all required fields')
@@ -424,10 +325,6 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
     if (!formData.credits_used || formData.credits_used < 1) {
       toast.error('Credits must be at least 1')
       return
-    }
-    if (groupLesson) {
-      // Defensive: ensure primary student isn't duplicated in additional list
-      setAdditionalStudentIds((prev) => prev.filter((id) => id !== formData.student_id))
     }
     if (!isNew && lesson) {
       const isPast = new Date(lesson.start_time) <= new Date()
@@ -456,14 +353,6 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
       default: return 'badge-pending'
     }
   }
-
-  const primaryStudentId = lesson?.student_id ?? null
-
-  const additionalStudentOptions = useMemo(() => {
-    if (!students) return []
-    const primary = formData.student_id
-    return students.filter((student) => student.id !== primary)
-  }, [students, formData.student_id])
 
   const detailsContent = (
     <div className="space-y-6">
@@ -561,116 +450,6 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
                       ))}
                     </SelectContent>
                   </Select>
-                  <div className="flex items-center space-x-2 pt-1">
-                    <Checkbox
-                      id="group_lesson"
-                      checked={groupLesson}
-                      onCheckedChange={(checked) => {
-                        const next = checked === true
-                        setGroupLesson(next)
-                        if (!next) {
-                          setAdditionalStudentIds([])
-                          setAdditionalStudentsOpen(false)
-                        } else {
-                          // Ensure no duplication with primary
-                          setAdditionalStudentIds((prev) => prev.filter((id) => id !== formData.student_id))
-                        }
-                      }}
-                    />
-                    <Label
-                      htmlFor="group_lesson"
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      Group Lesson
-                    </Label>
-                  </div>
-
-                  {groupLesson && (
-                    <div className="grid gap-2 pt-2">
-                      <Label htmlFor="additional_students">Additional students</Label>
-                      <Popover open={additionalStudentsOpen} onOpenChange={setAdditionalStudentsOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            className="w-full justify-between"
-                            disabled={!formData.student_id}
-                          >
-                            {additionalStudentIds.length > 0
-                              ? `${additionalStudentIds.length} additional student${additionalStudentIds.length > 1 ? 's' : ''} selected`
-                              : 'Select additional students...'}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-full p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Search students..." />
-                            <CommandList>
-                              <CommandEmpty>No students found.</CommandEmpty>
-                              <CommandGroup>
-                                {additionalStudentOptions.map((student) => (
-                                  <CommandItem
-                                    key={student.id}
-                                    value={student.id}
-                                    onSelect={() => {
-                                      setAdditionalStudentIds((prev) =>
-                                        prev.includes(student.id)
-                                          ? prev.filter((id) => id !== student.id)
-                                          : [...prev, student.id]
-                                      )
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        'mr-2 h-4 w-4',
-                                        additionalStudentIds.includes(student.id)
-                                          ? 'opacity-100'
-                                          : 'opacity-0'
-                                      )}
-                                    />
-                                    <span className="flex items-center gap-2">
-                                      <span>{student.full_name}</span>
-                                      <span className="text-xs text-muted-foreground">
-                                        ({student.credits} credits)
-                                      </span>
-                                    </span>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-
-                      {additionalStudentIds.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {additionalStudentIds.map((studentId) => {
-                            const student = students?.find((s) => s.id === studentId)
-                            if (!student) return null
-                            return (
-                              <Badge
-                                key={studentId}
-                                variant="secondary"
-                                className="flex items-center gap-1"
-                              >
-                                {student.full_name}
-                                <button
-                                  onClick={() =>
-                                    setAdditionalStudentIds((prev) =>
-                                      prev.filter((id) => id !== studentId)
-                                    )
-                                  }
-                                  className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </Badge>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -843,7 +622,7 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
                       htmlFor="pre_agreed"
                       className="text-sm font-normal cursor-pointer"
                     >
-                      Pre-agreed with {groupLesson ? 'students' : 'student'}
+                      Pre-agreed with student
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -884,78 +663,6 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
                   <div className="text-center py-6 text-muted-foreground">
                     <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
                     <p className="text-sm">No notes yet</p>
-                  </div>
-                )}
-              </DrawerSection>
-            </>
-          )}
-          {!isNew && lesson && (
-            <>
-              <Separator />
-              <DrawerSection title="Participants">
-                {participantsLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading participants…</p>
-                ) : lessonParticipants && lessonParticipants.length > 0 ? (
-                  <div className="space-y-3">
-                    {lessonParticipants.map((participant) => {
-                      const isPrimary = participant.student_id === primaryStudentId
-                      return (
-                        <div
-                          key={participant.student_id}
-                          className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
-                        >
-                          <div>
-                            <p className="font-medium">
-                              {participant.student?.full_name || 'Student'}
-                            </p>
-                            {participant.student?.email && (
-                              <p className="text-xs text-muted-foreground">
-                                {participant.student.email}
-                              </p>
-                            )}
-                          </div>
-                          {isPrimary ? (
-                            <Badge className="badge-confirmed">Primary</Badge>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeParticipantMutation.mutate(participant.student_id)}
-                              disabled={removeParticipantMutation.isPending}
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No additional participants yet. Add students to invite them to the live call.
-                  </p>
-                )}
-
-                {availableParticipants.length > 0 && (
-                  <div className="mt-4 flex gap-2">
-                    <Select value={participantToAdd} onValueChange={setParticipantToAdd}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select student to add" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableParticipants.map((student) => (
-                          <SelectItem key={student.id} value={student.id}>
-                            {student.full_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      onClick={() => participantToAdd && addParticipantMutation.mutate(participantToAdd)}
-                      disabled={!participantToAdd || addParticipantMutation.isPending}
-                    >
-                      Add
-                    </Button>
                   </div>
                 )}
               </DrawerSection>

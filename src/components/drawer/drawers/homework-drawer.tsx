@@ -43,7 +43,7 @@ import type {
   Material,
 } from '@/types/database'
 import { createHomeworkSubmissionSignedUrl } from '@/lib/storage/homework-submissions'
-import { isHomeworkOverdue, normalizeHomeworkStatus, presentHomeworkStatus } from '@/lib/homework-status'
+import { normalizeHomeworkStatus, presentHomeworkStatus } from '@/lib/homework-status'
 
 interface HomeworkDrawerProps {
   id: string | null
@@ -233,9 +233,8 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
       toast.success(isNew ? 'Homework assigned' : 'Homework updated')
       if (isNew) closeDrawer()
     },
-    onError: (error) => {
+    onError: () => {
       toast.error('Failed to save homework')
-      console.error(error)
     },
   })
 
@@ -250,9 +249,8 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
       toast.success('Homework deleted')
       closeDrawer()
     },
-    onError: (error) => {
+    onError: () => {
       toast.error('Failed to delete homework')
-      console.error(error)
     },
   })
 
@@ -279,9 +277,8 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
       queryClient.invalidateQueries({ queryKey: ['homework-submission', id] })
       toast.success('Review submitted')
     },
-    onError: (error) => {
+    onError: () => {
       toast.error('Failed to submit review')
-      console.error(error)
     },
   })
 
@@ -301,9 +298,8 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
       queryClient.invalidateQueries({ queryKey: ['homework-submission', id] })
       toast.success('Feedback saved')
     },
-    onError: (error) => {
+    onError: () => {
       toast.error('Failed to save feedback')
-      console.error(error)
     },
   })
 
@@ -328,7 +324,6 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
     onError: (error) => {
       const message = error instanceof Error ? error.message : 'Failed to request revision'
       toast.error(message)
-      console.error(error)
     },
   })
 
@@ -358,8 +353,7 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
         expiresIn: 60 * 10,
       })
       window.open(signedUrl, '_blank', 'noopener,noreferrer')
-    } catch (error) {
-      console.error(error)
+    } catch {
       toast.error('Unable to open file')
     } finally {
       setOpeningSubmissionPath(null)
