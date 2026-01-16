@@ -35,8 +35,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
         } = await supabase.auth.getUser()
 
         if (authError) {
+          const authErrorName =
+            typeof authError === 'object' && authError !== null && 'name' in authError
+              ? String((authError as { name?: unknown }).name ?? '')
+              : undefined
           const isSessionMissingError =
-            (authError as any).name === 'AuthSessionMissingError' ||
+            authErrorName === 'AuthSessionMissingError' ||
             authError.message?.toLowerCase().includes('auth session missing')
 
           // Treat missing session as "no authenticated user" without logging a noisy error

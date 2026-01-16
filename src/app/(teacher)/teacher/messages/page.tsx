@@ -5,21 +5,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Send, Search, MessageSquare } from 'lucide-react'
-import { format, isToday, isYesterday } from 'date-fns'
+import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import type { Message, Student, Profile } from '@/types/database'
-
-type ThreadWithMessages = {
-  id: string
-  participant: Pick<Student, 'id' | 'full_name' | 'avatar_url' | 'email'>
-  lastMessage: Message | null
-  unreadCount: number
-}
+import type { Message } from '@/types/database'
 
 export default function MessagesPage() {
   const supabase = createClient()
@@ -158,13 +150,6 @@ export default function MessagesPage() {
 
   const getInitials = (name: string) => {
     return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-  }
-
-  const formatMessageTime = (date: string) => {
-    const d = new Date(date)
-    if (isToday(d)) return format(d, 'h:mm a')
-    if (isYesterday(d)) return 'Yesterday'
-    return format(d, 'MMM d')
   }
 
   const handleSendMessage = (e: React.FormEvent) => {

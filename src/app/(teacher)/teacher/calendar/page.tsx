@@ -135,7 +135,6 @@ export default function CalendarPage() {
       id,
       start,
       end,
-      revert,
     }: {
       id: string
       start: Date
@@ -168,10 +167,13 @@ export default function CalendarPage() {
   })
 
   // Convert lessons to calendar events (hide cancelled)
-  const visibleLessons =
-    lessons?.filter((lesson) =>
-      ['pending', 'confirmed', 'completed'].includes(lesson.status)
-    ) || []
+  const visibleLessons = useMemo(
+    () =>
+      lessons?.filter((lesson) =>
+        ['pending', 'confirmed', 'completed'].includes(lesson.status)
+      ) || [],
+    [lessons]
+  )
 
   const scheduleCountByDay = useMemo(() => {
     const map = new Map<string, number>()

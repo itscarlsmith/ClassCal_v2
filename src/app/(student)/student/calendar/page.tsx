@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import interactionPlugin from '@fullcalendar/interaction'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -18,10 +18,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { format, addWeeks, subWeeks } from 'date-fns'
+import { addWeeks, subWeeks } from 'date-fns'
 import {
   getAvailabilityRanges,
-  generateAvailableSlots,
   subtractBusyFromAvailability,
   toCalendarBackgroundEvents,
   type BusyInterval,
@@ -43,6 +42,21 @@ type TeacherOption = {
 type BookableSlot = {
   startTime: string
   endTime: string
+}
+
+type StudentRow = {
+  id: string
+  teacher_id: string | null
+}
+
+type TeacherProfile = {
+  id: string
+  full_name: string | null
+  avatar_url: string | null
+}
+
+type StudentRowWithTeacher = StudentRow & {
+  teacher_profile: TeacherProfile | null
 }
 
 const statusColors: Record<string, { bg: string; border: string; text: string }> = {
@@ -73,7 +87,7 @@ export default function StudentCalendarPage() {
 
   useFullCalendarAutosize({ calendarRef, containerRef })
 
-  const { data: studentRows, isLoading: isTeachersLoading } = useQuery<any[]>({
+  const { data: studentRows, isLoading: isTeachersLoading } = useQuery<StudentRowWithTeacher[]>({
     queryKey: ['student-teachers'],
     queryFn: async () => {
       const { data: userData, error: userError } = await supabase.auth.getUser()
@@ -87,26 +101,26 @@ export default function StudentCalendarPage() {
         .eq('user_id', userData.user.id)
 
       if (studentsError) throw studentsError
-      const students = studentsData || []
+      const students = (studentsData || []) as StudentRow[]
 
       const teacherIds = Array.from(
-        new Set(students.map((s: any) => s.teacher_id).filter(Boolean))
+        new Set(students.map((s) => s.teacher_id).filter((id): id is string => Boolean(id)))
       )
 
-      let teacherProfiles: any[] = []
+      let teacherProfiles: TeacherProfile[] = []
       if (teacherIds.length > 0) {
         const { data: profiles, error: profilesError } = await supabase
           .from('profiles')
           .select('id, full_name, avatar_url')
           .in('id', teacherIds)
         if (profilesError) throw profilesError
-        teacherProfiles = profiles || []
+        teacherProfiles = (profiles || []) as TeacherProfile[]
       }
 
-      const teacherMap = new Map<string, any>()
+      const teacherMap = new Map<string, TeacherProfile>()
       teacherProfiles.forEach((t) => teacherMap.set(t.id, t))
 
-      return students.map((row: any) => ({
+      return students.map((row) => ({
         ...row,
         teacher_profile: row.teacher_id ? teacherMap.get(row.teacher_id) || null : null,
       }))
@@ -127,50 +141,39 @@ export default function StudentCalendarPage() {
     return Array.from(seen.values())
   }, [studentRows])
 
-  useEffect(() => {
-    if (!teacherOptions.length) {
-      setSelectedTeacherId(null)
-      return
-    }
+  const resolvedTeacherId = useMemo(() => {
+    if (!teacherOptions.length) return null
 
     const requestedMatch = requestedTeacherId
       ? teacherOptions.find((t) => t.teacherId === requestedTeacherId)
       : undefined
 
     if (requestedMatch) {
-      if (selectedTeacherId !== requestedMatch.teacherId) {
-        setSelectedTeacherId(requestedMatch.teacherId)
-      }
-      return
+      return requestedMatch.teacherId
     }
 
-    if (teacherOptions.length === 1) {
-      if (selectedTeacherId !== teacherOptions[0].teacherId) {
-        setSelectedTeacherId(teacherOptions[0].teacherId)
-      }
-      return
+    if (selectedTeacherId && teacherOptions.some((t) => t.teacherId === selectedTeacherId)) {
+      return selectedTeacherId
     }
 
-    if (!selectedTeacherId || !teacherOptions.some((t) => t.teacherId === selectedTeacherId)) {
-      setSelectedTeacherId(teacherOptions[0].teacherId)
-    }
+    return teacherOptions[0].teacherId
   }, [teacherOptions, requestedTeacherId, selectedTeacherId])
 
   const selectedTeacher = useMemo(
-    () => teacherOptions.find((option) => option.teacherId === selectedTeacherId),
-    [teacherOptions, selectedTeacherId]
+    () => teacherOptions.find((option) => option.teacherId === resolvedTeacherId),
+    [teacherOptions, resolvedTeacherId]
   )
   const selectedStudentId = selectedTeacher?.studentId
   const teacherDisplayName = selectedTeacher?.teacherName || 'Teacher'
 
   const { data: availabilityBlocks } = useQuery({
-    queryKey: ['student-calendar-availability', selectedTeacherId],
-    enabled: !!selectedTeacherId,
+    queryKey: ['student-calendar-availability', resolvedTeacherId],
+    enabled: !!resolvedTeacherId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('availability_blocks')
         .select('*')
-        .eq('teacher_id', selectedTeacherId)
+        .eq('teacher_id', resolvedTeacherId)
       if (error) throw error
       return data as AvailabilityBlock[]
     },
@@ -179,58 +182,40 @@ export default function StudentCalendarPage() {
   const { data: lessons } = useQuery({
     queryKey: [
       'student-calendar-lessons',
-      selectedTeacherId,
+      resolvedTeacherId,
       selectedStudentId,
       visibleRange.start.toISOString(),
       visibleRange.end.toISOString(),
     ],
-    enabled: !!selectedTeacherId && !!selectedStudentId,
+    enabled: !!resolvedTeacherId && !!selectedStudentId,
     queryFn: async () => {
-      const [primary, group] = await Promise.all([
-        supabase
-          .from('lessons')
-          .select('*')
-          .eq('teacher_id', selectedTeacherId)
-          .eq('student_id', selectedStudentId)
-          .gte('start_time', visibleRange.start.toISOString())
-          .lte('end_time', visibleRange.end.toISOString())
-          .order('start_time', { ascending: true }),
-        supabase
-          .from('lessons')
-          .select('*, lesson_students!inner(student_id)')
-          .eq('teacher_id', selectedTeacherId)
-          .in('lesson_students.student_id', [selectedStudentId])
-          .gte('start_time', visibleRange.start.toISOString())
-          .lte('end_time', visibleRange.end.toISOString())
-          .order('start_time', { ascending: true }),
-      ])
+      const { data, error } = await supabase
+        .from('lessons')
+        .select('*')
+        .eq('teacher_id', resolvedTeacherId)
+        .eq('student_id', selectedStudentId)
+        .gte('start_time', visibleRange.start.toISOString())
+        .lte('end_time', visibleRange.end.toISOString())
+        .order('start_time', { ascending: true })
 
-      if (primary.error) throw primary.error
-      if (group.error) throw group.error
-
-      const combined = [
-        ...(((primary.data || []) as unknown) as Lesson[]),
-        ...(((group.data || []) as unknown) as Lesson[]),
-      ]
-      const deduped = Array.from(new Map(combined.map((l) => [l.id, l])).values())
-        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-      return deduped
+      if (error) throw error
+      return (data || []) as Lesson[]
     },
   })
 
   const { data: bookableSlots } = useQuery({
     queryKey: [
       'student-bookable-slots',
-      selectedTeacherId,
+      resolvedTeacherId,
       visibleRange.start.toISOString(),
       visibleRange.end.toISOString(),
     ],
-    enabled: !!selectedTeacherId,
+    enabled: !!resolvedTeacherId,
     queryFn: async () => {
       const params = new URLSearchParams({
         start: visibleRange.start.toISOString(),
         end: visibleRange.end.toISOString(),
-        teacher: selectedTeacherId || '',
+        teacher: resolvedTeacherId || '',
       })
       const res = await fetch(`/api/student/bookable-slots?${params.toString()}`)
       if (!res.ok) {
@@ -242,13 +227,13 @@ export default function StudentCalendarPage() {
   })
 
   const availabilityRanges = useMemo(() => {
-    if (!availabilityBlocks || !selectedTeacherId) return []
+    if (!availabilityBlocks || !resolvedTeacherId) return []
     return getAvailabilityRanges(
       availabilityBlocks,
       visibleRange.start,
       visibleRange.end
     )
-  }, [availabilityBlocks, selectedTeacherId, visibleRange])
+  }, [availabilityBlocks, resolvedTeacherId, visibleRange])
 
   const lessonEvents = useMemo(() => {
     if (!lessons) return []
@@ -315,33 +300,23 @@ export default function StudentCalendarPage() {
     [lessonEvents, slotEvents, availabilityEvents, showAvailability]
   )
 
-  const updateTitle = () => {
-    const api = calendarRef.current?.getApi()
-    if (api) {
-      setCurrentTitle(api.view.title)
-    }
+  const handleDatesSet = (arg: DatesSetArg) => {
+    setCurrentTitle(arg.view.title)
   }
-
-  useEffect(() => {
-    updateTitle()
-  }, [])
 
   const handlePrev = () => {
     const api = calendarRef.current?.getApi()
     api?.prev()
-    updateTitle()
   }
 
   const handleNext = () => {
     const api = calendarRef.current?.getApi()
     api?.next()
-    updateTitle()
   }
 
   const handleToday = () => {
     const api = calendarRef.current?.getApi()
     api?.today()
-    updateTitle()
   }
 
   const handleEventClick = (info: EventClickArg) => {
@@ -408,7 +383,7 @@ export default function StudentCalendarPage() {
               Teacher
             </p>
             <Select
-              value={selectedTeacherId || undefined}
+              value={resolvedTeacherId || undefined}
               onValueChange={(value) => setSelectedTeacherId(value)}
               disabled={isTeachersLoading || teacherOptions.length === 0}
             >
@@ -489,7 +464,7 @@ export default function StudentCalendarPage() {
             slotDuration="01:00:00"
             height="100%"
             eventClick={handleEventClick}
-          dateClick={handleDateClick}
+            dateClick={handleDateClick}
           eventContent={(eventInfo) => {
             if (eventInfo.event.display === 'background') return null
             const type = eventInfo.event.extendedProps.type as string | undefined
@@ -557,8 +532,8 @@ export default function StudentCalendarPage() {
             )
           }}
             datesSet={(arg: DatesSetArg) => {
+              handleDatesSet(arg)
               setVisibleRange({ start: arg.start, end: arg.end })
-              updateTitle()
             }}
           />
         </div>

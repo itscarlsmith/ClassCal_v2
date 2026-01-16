@@ -1,7 +1,7 @@
 import { create } from 'zustand'
-import type { Profile, Student, Lesson, Homework } from '@/types/database'
+import type { Profile, Student } from '@/types/database'
 
-export type DrawerType = 
+type DrawerType = 
   | 'student'
   | 'lesson'
   | 'booking'
@@ -16,7 +16,7 @@ export type DrawerType =
   | 'student-homework'
   | null
 
-export interface DrawerState {
+interface DrawerState {
   type: DrawerType
   id: string | null
   data?: Record<string, unknown>

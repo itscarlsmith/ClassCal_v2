@@ -25,6 +25,14 @@ type LessonMaterialSummary = {
   external_url: string | null
 }
 
+type LessonMaterialRow = {
+  material: LessonMaterialSummary | LessonMaterialSummary[] | null
+}
+
+type LessonWithTeacher = Lesson & {
+  teacher: { id: string; full_name: string; avatar_url: string | null; email: string | null } | null
+}
+
 interface StudentLessonDrawerProps {
   id: string | null
   data?: Record<string, unknown>
@@ -46,9 +54,7 @@ export function StudentLessonDrawer({ id }: StudentLessonDrawerProps) {
         .eq('id', id)
         .single()
       if (error) throw error
-      return data as Lesson & {
-        teacher: { id: string; full_name: string; avatar_url: string | null; email: string | null } | null
-      }
+      return data as LessonWithTeacher
     },
   })
 
@@ -76,9 +82,10 @@ export function StudentLessonDrawer({ id }: StudentLessonDrawerProps) {
         .select('material:materials(id, title, type, file_url, external_url)')
         .eq('lesson_id', id)
       if (error) throw error
-      return (data || [])
-        .map((row: any) => {
-          const material = Array.isArray(row.material) ? row.material?.[0] : row.material
+      const rows = (data || []) as LessonMaterialRow[]
+      return rows
+        .map((row) => {
+          const material = Array.isArray(row.material) ? row.material[0] : row.material
           return (material ?? null) as LessonMaterialSummary | null
         })
         .filter((material): material is LessonMaterialSummary => !!material)
@@ -133,8 +140,7 @@ export function StudentLessonDrawer({ id }: StudentLessonDrawerProps) {
       // Optimistically update the current drawer's lesson data
       queryClient.setQueryData(
         ['student-lesson', id],
-        (old: (Lesson & { teacher: any }) | undefined) =>
-          old ? { ...old, status } : old
+        (old: LessonWithTeacher | undefined) => (old ? { ...old, status } : old)
       )
 
       queryClient.invalidateQueries({ queryKey: ['student-lesson', id] })
@@ -193,8 +199,7 @@ export function StudentLessonDrawer({ id }: StudentLessonDrawerProps) {
         expiresIn: 60 * 10,
       })
       window.open(signedUrl, '_blank', 'noopener,noreferrer')
-    } catch (error) {
-      console.error(error)
+    } catch {
       toast.error('Unable to open material')
     } finally {
       setMaterialOpeningId(null)

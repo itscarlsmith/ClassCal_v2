@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient , useQuery } from '@tanstack/react-query'
 import { Drawer, DrawerSection, DrawerFooter } from '../drawer'
 import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { format, addMinutes } from 'date-fns'
-import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 
 interface StudentBookingDrawerProps {
@@ -21,6 +20,8 @@ export function StudentBookingDrawer({ id, data }: StudentBookingDrawerProps) {
   const { closeDrawer } = useAppStore()
   const queryClient = useQueryClient()
   const supabase = createClient()
+
+  void id
 
   const slotStartIso = data?.slotStart as string | undefined
   const slotEndIso = data?.slotEnd as string | undefined

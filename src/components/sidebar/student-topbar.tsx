@@ -4,6 +4,9 @@ import { usePathname } from 'next/navigation'
 import { Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
+const topbarClassName =
+  'h-14 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 flex items-center justify-between'
+
 function getStudentPageTitle(pathname: string) {
   if (pathname.startsWith('/student/calendar')) return 'Calendar'
   if (pathname.startsWith('/student/lessons')) return 'Lessons'
@@ -19,7 +22,7 @@ export function StudentTopbar() {
   const title = getStudentPageTitle(pathname)
 
   return (
-    <header className="h-14 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 flex items-center justify-between">
+    <header className={topbarClassName}>
       <div>
         <p className="text-xs uppercase text-muted-foreground tracking-widest">
           Student workspace

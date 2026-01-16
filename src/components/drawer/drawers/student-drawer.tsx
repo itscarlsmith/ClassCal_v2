@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Drawer, DrawerSection, DrawerFooter } from '../drawer'
 import { useAppStore } from '@/store/app-store'
@@ -15,16 +15,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { 
-  Mail, 
-  Phone, 
   CreditCard, 
-  Calendar, 
-  BookOpen,
-  FileText,
-  MessageSquare,
+  Calendar,
   Trash2,
   Save,
-  Plus,
   Users
 } from 'lucide-react'
 import type { Student, Parent } from '@/types/database'
@@ -40,6 +34,8 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
   const supabase = createClient()
   const isNew = !id || id === 'new'
   
+  void data
+
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
@@ -63,6 +59,17 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
       return data as Student & { parents: Parent[] }
     },
     enabled: !isNew && !!id,
+    onSuccess: (loadedStudent) => {
+      if (!loadedStudent) return
+      setFormData({
+        full_name: loadedStudent.full_name,
+        email: loadedStudent.email,
+        phone: loadedStudent.phone || '',
+        notes: loadedStudent.notes || '',
+        hourly_rate: loadedStudent.hourly_rate,
+        credits: loadedStudent.credits,
+      })
+    },
   })
 
   // Fetch student's recent lessons
@@ -81,20 +88,6 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
     },
     enabled: !isNew && !!id,
   })
-
-  // Update form when student data loads
-  useEffect(() => {
-    if (student) {
-      setFormData({
-        full_name: student.full_name,
-        email: student.email,
-        phone: student.phone || '',
-        notes: student.notes || '',
-        hourly_rate: student.hourly_rate,
-        credits: student.credits,
-      })
-    }
-  }, [student])
 
   // Save mutation
   const saveMutation = useMutation({
@@ -139,9 +132,8 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
       toast.success(isNew ? 'Student created' : 'Student updated')
       if (isNew) closeDrawer()
     },
-    onError: (error) => {
+    onError: () => {
       toast.error('Failed to save student')
-      console.error(error)
     },
   })
 
@@ -159,9 +151,8 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
       toast.success('Student deleted')
       closeDrawer()
     },
-    onError: (error) => {
+    onError: () => {
       toast.error('Failed to delete student')
-      console.error(error)
     },
   })
 

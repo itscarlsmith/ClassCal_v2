@@ -30,7 +30,8 @@ export function NavItem({ label, icon, href, sectionKey, badge, children }: NavI
   const childHrefs = React.useMemo(() => {
     if (!children) return []
     return React.Children.toArray(children)
-      .map((child: any) => child?.props?.href as string | undefined)
+      .filter((child): child is React.ReactElement<NavSubItemProps> => React.isValidElement(child))
+      .map((child) => child.props.href)
       .filter((value): value is string => typeof value === 'string' && value.length > 0)
   }, [children])
 
@@ -79,10 +80,10 @@ export function NavItem({ label, icon, href, sectionKey, badge, children }: NavI
           <PopoverContent side="right" align="start" className="w-64 p-2">
             <div className="px-2 py-1.5 text-sm font-semibold">{label}</div>
             <div className="space-y-1">
-              {React.Children.map(children, (child: any) => {
+              {React.Children.map(children, (child) => {
                 if (!React.isValidElement(child)) return child
                 // `children` are expected to be `NavSubItem` elements; cast to allow adding the variant prop.
-                return React.cloneElement(child as any, { variant: 'popover' } as any)
+                return React.cloneElement(child, { variant: 'popover' })
               })}
             </div>
           </PopoverContent>

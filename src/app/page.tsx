@@ -1,6 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 
+const pageLayoutClassName =
+  'min-h-screen flex flex-col items-center justify-center gap-6 p-8 text-center bg-gradient-to-b from-background to-muted/40'
+const primaryLinkClassName =
+  'inline-flex h-12 items-center justify-center rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg'
+const secondaryLinkClassName =
+  'inline-flex h-12 items-center justify-center rounded-xl border border-input px-6 text-sm font-semibold text-foreground transition hover:bg-accent'
+
 export default async function HomePage() {
   const supabase = await createClient()
   const {
@@ -23,7 +30,7 @@ export default async function HomePage() {
   const studentHref = role === 'student' ? '/student/dashboard' : '/student/login'
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-6 p-8 text-center bg-gradient-to-b from-background to-muted/40">
+    <main className={pageLayoutClassName}>
       <div className="space-y-3 max-w-xl">
         <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
           Welcome to ClassCal
@@ -40,13 +47,13 @@ export default async function HomePage() {
       <div className="flex flex-wrap items-center justify-center gap-4">
         <Link
           href={teacherHref}
-          className="inline-flex h-12 items-center justify-center rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+          className={primaryLinkClassName}
         >
           Enter Teacher App
         </Link>
         <Link
           href={studentHref}
-          className="inline-flex h-12 items-center justify-center rounded-xl border border-input px-6 text-sm font-semibold text-foreground transition hover:bg-accent"
+          className={secondaryLinkClassName}
         >
           Enter Student App
         </Link>

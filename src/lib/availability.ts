@@ -5,7 +5,6 @@ import {
   setHours,
   setMinutes,
   getDay,
-  format,
   parseISO,
   isSameDay,
   addMinutes,
@@ -212,24 +211,6 @@ export function subtractBusyFromAvailability(
 }
 
 /**
- * Check if a specific time slot is within any of the availability ranges.
- * 
- * @param slotStart - Start of the slot to check
- * @param slotEnd - End of the slot to check
- * @param ranges - Available time ranges
- * @returns true if the slot is fully within an availability range
- */
-export function isSlotAvailable(
-  slotStart: Date,
-  slotEnd: Date,
-  ranges: AvailabilityRange[]
-): boolean {
-  return ranges.some(
-    (range) => slotStart >= range.start && slotEnd <= range.end
-  )
-}
-
-/**
  * Generate available booking slots from availability ranges.
  * This can be used by student self-booking to show available times.
  * 
@@ -310,33 +291,5 @@ export function toCalendarBackgroundEvents(
     backgroundColor: range.isOneTime ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.1)',
     classNames: [range.isOneTime ? 'one-time-availability' : 'weekly-availability'],
   }))
-}
-
-/**
- * Get availability for a specific date (convenience function).
- * 
- * @param blocks - All availability blocks
- * @param date - The date to check
- * @returns Availability ranges for that specific date
- */
-export function getAvailabilityForDate(
-  blocks: AvailabilityBlock[],
-  date: Date
-): AvailabilityRange[] {
-  return getAvailabilityRanges(blocks, startOfDay(date), endOfDay(date))
-}
-
-/**
- * Check if a teacher has any availability on a specific date.
- * 
- * @param blocks - All availability blocks
- * @param date - The date to check
- * @returns true if there's any availability on that date
- */
-export function hasAvailabilityOnDate(
-  blocks: AvailabilityBlock[],
-  date: Date
-): boolean {
-  return getAvailabilityForDate(blocks, date).length > 0
 }
 

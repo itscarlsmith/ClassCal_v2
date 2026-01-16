@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -12,19 +13,13 @@ import type { Message } from '@/types/database'
 interface LessonChatProps {
   lessonId: string
   className?: string
+  onClose?: () => void
 }
 
 type LessonRow = {
   id: string
   teacher_id: string
   student_id: string | null
-}
-
-type StudentRow = {
-  id: string
-  user_id: string
-  full_name: string
-  avatar_url: string | null
 }
 
 type ProfileRow = {
@@ -61,30 +56,24 @@ type ThreadChatMessage = Pick<Message, 'id' | 'sender_id' | 'recipient_id' | 'th
   is_read?: boolean
 }
 
-function uniqStrings(values: Array<string | null | undefined>) {
-  return Array.from(new Set(values.filter((v): v is string => typeof v === 'string' && v.length > 0)))
-}
-
-function getErrorField(err: unknown, key: string): unknown {
-  if (typeof err !== 'object' || err === null) return undefined
-  const record = err as Record<string, unknown>
-  return key in record ? record[key] : undefined
-}
-
-function getInitials(name: string) {
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
-}
-
-function EmptyPanel({ title, message }: { title: string; message: string }) {
+function EmptyPanel({
+  title,
+  message,
+  onClose,
+}: {
+  title: string
+  message: string
+  onClose?: () => void
+}) {
   return (
     <div className="flex h-full flex-col rounded-xl border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <p className="text-sm font-semibold">{title}</p>
+        {onClose && (
+          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close chat">
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
       <div className="flex flex-1 items-center justify-center px-4 py-6 text-center text-sm text-muted-foreground">
         {message}
@@ -99,12 +88,14 @@ function ThreadChatPanel({
   currentUserId,
   otherProfileId,
   threadId,
+  onClose,
 }: {
   supabase: ReturnType<typeof createClient>
   title: string
   currentUserId: string
   otherProfileId: string
   threadId: string | null
+  onClose?: () => void
 }) {
   const [messages, setMessages] = useState<ThreadChatMessage[]>([])
   const [loading, setLoading] = useState(false)
@@ -224,8 +215,7 @@ function ThreadChatPanel({
           messageIdsRef.current.add(inserted.id)
           setMessages((prev) => [...prev, inserted as ThreadChatMessage])
         }
-      } catch (err) {
-        console.error('Failed to send thread chat message', err)
+      } catch {
         toast.error('Unable to send message.')
       } finally {
         setSending(false)
@@ -242,10 +232,17 @@ function ThreadChatPanel({
     <div className="flex h-full flex-col rounded-xl border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <p className="text-sm font-semibold">{title}</p>
-        {loading && <span className="text-xs text-muted-foreground">Loading…</span>}
+        <div className="flex items-center gap-2">
+          {loading && <span className="text-xs text-muted-foreground">Loading…</span>}
+          {onClose && (
+            <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close chat">
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
         {error && (
           <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
@@ -281,7 +278,10 @@ function ThreadChatPanel({
         </div>
       </div>
 
-      <form onSubmit={handleSend} className="border-t border-border p-3">
+      <form
+        onSubmit={handleSend}
+        className="border-t border-border px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+      >
         <div className="flex gap-2">
           <Input
             value={input}
@@ -298,17 +298,17 @@ function ThreadChatPanel({
   )
 }
 
-export function LessonChat({ lessonId, className }: LessonChatProps) {
+export function LessonChat({ lessonId, className, onClose }: LessonChatProps) {
   const supabase = useMemo(() => createClient(), [])
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [lesson, setLesson] = useState<LessonRow | null>(null)
-  const [targets, setTargets] = useState<ThreadTarget[]>([])
-  const [threadMetaByOther, setThreadMetaByOther] = useState<Record<string, ThreadMeta>>({})
+  const [target, setTarget] = useState<ThreadTarget | null>(null)
+  const [threadMeta, setThreadMeta] = useState<ThreadMeta | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Bootstrap: auth uid + lesson participants (teacher vs student)
+  // Bootstrap: auth uid + lesson teacher/student context
   useEffect(() => {
     let isMounted = true
 
@@ -316,6 +316,8 @@ export function LessonChat({ lessonId, className }: LessonChatProps) {
       if (!lessonId) return
       setLoading(true)
       setError(null)
+      setTarget(null)
+      setThreadMeta(null)
 
       try {
         const {
@@ -344,56 +346,32 @@ export function LessonChat({ lessonId, className }: LessonChatProps) {
         const isTeacher = normalizedLesson.teacher_id === user.id
 
         if (isTeacher) {
-          // teacher: split chat by each student in the lesson
-          const { data: extraStudents, error: extraStudentsError } = await supabase
-            .from('lesson_students')
-            .select('student_id')
-            .eq('lesson_id', lessonId)
-          const isLessonStudentsMissing =
-            Boolean(extraStudentsError) &&
-            (String(getErrorField(extraStudentsError, 'code')) === '42P01' ||
-              String(getErrorField(extraStudentsError, 'message') || '')
-                .toLowerCase()
-                .includes('lesson_students') ||
-              Number(getErrorField(extraStudentsError, 'status')) === 404)
-          if (extraStudentsError && !isLessonStudentsMissing) throw extraStudentsError
+          // Teacher: chat with the primary student for this lesson
+          const { data: student, error: studentError } = await supabase
+            .from('students')
+            .select('id, user_id, full_name, avatar_url')
+            .eq('id', normalizedLesson.student_id)
+            .maybeSingle()
 
-          const participantStudentIds = uniqStrings([
-            normalizedLesson.student_id,
-            ...((!extraStudentsError && (extraStudents as Array<{ student_id: string }> | null)) || []).map(
-              (row) => row.student_id
-            ),
-          ])
+          if (studentError) throw studentError
 
-          if (participantStudentIds.length === 0) {
-            setTargets([])
+          if (!student?.user_id) {
+            if (isMounted) {
+              setTarget(null)
+              setError('Student is not linked to a user account for chat.')
+            }
             return
           }
 
-          const { data: students, error: studentsError } = await supabase
-            .from('students')
-            .select('id, user_id, full_name, avatar_url')
-            .in('id', participantStudentIds)
-
-          if (studentsError) throw studentsError
-
-          const mapped = (students || [])
-            .filter((s): s is StudentRow => {
-              const row = s as unknown as Record<string, unknown>
-              return typeof row.user_id === 'string' && row.user_id.length > 0
-            })
-            .map((s) => s as StudentRow)
-            .map<ThreadTarget>((s) => ({
-              kind: 'student',
-              otherProfileId: s.user_id,
-              label: s.full_name || 'Student',
-              avatarUrl: s.avatar_url ?? null,
-            }))
-
           if (!isMounted) return
-          setTargets(mapped)
+          setTarget({
+            kind: 'student',
+            otherProfileId: student.user_id,
+            label: student.full_name || 'Student',
+            avatarUrl: student.avatar_url ?? null,
+          })
         } else {
-          // student: single chat with the teacher in this lesson
+          // Student: single chat with the teacher in this lesson
           const teacherId = normalizedLesson.teacher_id
           const { data: teacherProfile, error: teacherProfileError } = await supabase
             .from('profiles')
@@ -405,14 +383,12 @@ export function LessonChat({ lessonId, className }: LessonChatProps) {
 
           const teacher = teacherProfile as ProfileRow | null
           if (!isMounted) return
-          setTargets([
-            {
-              kind: 'teacher',
-              otherProfileId: teacherId,
-              label: teacher?.full_name || 'Teacher',
-              avatarUrl: teacher?.avatar_url ?? null,
-            },
-          ])
+          setTarget({
+            kind: 'teacher',
+            otherProfileId: teacherId,
+            label: teacher?.full_name || 'Teacher',
+            avatarUrl: teacher?.avatar_url ?? null,
+          })
         }
       } catch (err) {
         console.error('Failed to bootstrap live lesson chat', err)
@@ -430,70 +406,50 @@ export function LessonChat({ lessonId, className }: LessonChatProps) {
     }
   }, [lessonId, supabase])
 
-  // Resolve existing threads (no creation)
+  // Resolve existing thread (no creation)
   useEffect(() => {
     let isMounted = true
 
     const resolveThreads = async () => {
-      if (!currentUserId || !lesson || targets.length === 0) return
+      if (!currentUserId || !lesson || !target) return
 
       // Teacher uses self as the teacher id; Student uses lesson.teacher_id.
       const isTeacher = lesson.teacher_id === currentUserId
       const teacherProfileId = isTeacher ? currentUserId : lesson.teacher_id
       const studentProfileId = isTeacher ? null : currentUserId
 
-      setThreadMetaByOther((prev) => {
-        const next = { ...prev }
-        for (const t of targets) {
-          next[t.otherProfileId] = { threadId: null, loading: true, error: null }
-        }
-        return next
-      })
+      setThreadMeta({ threadId: null, loading: true, error: null })
 
       try {
-        const results = await Promise.all(
-          targets.map(async (t) => {
-            const otherId = t.otherProfileId
-            const pair = isTeacher
-              ? [teacherProfileId, otherId]
-              : [teacherProfileId, studentProfileId].filter(Boolean)
+        const pair = isTeacher
+          ? [teacherProfileId, target.otherProfileId]
+          : [teacherProfileId, studentProfileId].filter(Boolean)
 
-            const { data: thread, error: threadError } = await supabase
-              .from('message_threads')
-              .select('id')
-              .contains('participant_ids', pair as string[])
-              .maybeSingle()
-
-            if (threadError) {
-              return { otherId, meta: { threadId: null, loading: false, error: threadError.message } }
-            }
-
-            return {
-              otherId,
-              meta: { threadId: (thread as ThreadRow | null)?.id ?? null, loading: false, error: null },
-            }
-          })
-        )
+        const { data: thread, error: threadError } = await supabase
+          .from('message_threads')
+          .select('id')
+          .contains('participant_ids', pair as string[])
+          .maybeSingle()
 
         if (!isMounted) return
-        setThreadMetaByOther((prev) => {
-          const next = { ...prev }
-          for (const r of results) next[r.otherId] = r.meta
-          return next
+
+        if (threadError) {
+          setThreadMeta({ threadId: null, loading: false, error: threadError.message })
+          return
+        }
+
+        setThreadMeta({
+          threadId: (thread as ThreadRow | null)?.id ?? null,
+          loading: false,
+          error: null,
         })
       } catch (err) {
         console.error('Failed to resolve message threads for lesson chat', err)
         if (!isMounted) return
-        setThreadMetaByOther((prev) => {
-          const next = { ...prev }
-          for (const t of targets) {
-            next[t.otherProfileId] = {
-              threadId: null,
-              loading: false,
-              error: 'Unable to load message thread.',
-            }
-          }
-          return next
+        setThreadMeta({
+          threadId: null,
+          loading: false,
+          error: 'Unable to load message thread.',
         })
       }
     }
@@ -503,80 +459,44 @@ export function LessonChat({ lessonId, className }: LessonChatProps) {
     return () => {
       isMounted = false
     }
-  }, [currentUserId, lesson, targets, supabase])
-
-  const isTeacherView = Boolean(currentUserId && lesson?.teacher_id === currentUserId)
+  }, [currentUserId, lesson, target, supabase])
 
   const content = useMemo(() => {
     if (error) {
-      return <EmptyPanel title="Lesson Chat" message={error} />
+      return <EmptyPanel title="Lesson Chat" message={error} onClose={onClose} />
     }
 
     if (loading) {
-      return <EmptyPanel title="Lesson Chat" message="Loading…" />
+      return <EmptyPanel title="Lesson Chat" message="Loading…" onClose={onClose} />
     }
 
     if (!currentUserId || !lesson) {
-      return <EmptyPanel title="Lesson Chat" message="Not ready yet." />
+      return <EmptyPanel title="Lesson Chat" message="Not ready yet." onClose={onClose} />
     }
 
-    if (targets.length === 0) {
-      return <EmptyPanel title="Lesson Chat" message="No participants found for this lesson." />
+    if (!target) {
+      return <EmptyPanel title="Lesson Chat" message="No teacher/student found for this lesson." onClose={onClose} />
     }
 
-    if (!isTeacherView) {
-      const target = targets[0]
-      const meta = threadMetaByOther[target.otherProfileId]
-      if (meta?.error) {
-        return <EmptyPanel title="Lesson Chat" message={meta.error} />
-      }
-      if (meta?.loading) {
-        return <EmptyPanel title="Lesson Chat" message="Loading chat…" />
-      }
-
-      return (
-        <ThreadChatPanel
-          supabase={supabase}
-          title={target.label}
-          currentUserId={currentUserId}
-          otherProfileId={target.otherProfileId}
-          threadId={meta?.threadId ?? null}
-        />
-      )
+    if (threadMeta?.error) {
+      return <EmptyPanel title="Lesson Chat" message={threadMeta.error} onClose={onClose} />
+    }
+    if (!threadMeta || threadMeta.loading) {
+      return <EmptyPanel title="Lesson Chat" message="Loading chat…" onClose={onClose} />
     }
 
-    // Teacher view: render one panel per student (split chat)
-    const panels = targets.map((t) => {
-      const meta = threadMetaByOther[t.otherProfileId]
-      const title = t.label
+    return (
+      <ThreadChatPanel
+        supabase={supabase}
+        title={target.label}
+        currentUserId={currentUserId}
+        otherProfileId={target.otherProfileId}
+        threadId={threadMeta?.threadId ?? null}
+        onClose={onClose}
+      />
+    )
+  }, [error, loading, currentUserId, lesson, target, threadMeta, supabase, onClose])
 
-      if (meta?.error) {
-        return <EmptyPanel key={t.otherProfileId} title={title} message={meta.error} />
-      }
-
-      if (meta?.loading) {
-        return <EmptyPanel key={t.otherProfileId} title={title} message="Loading chat…" />
-      }
-
-      return (
-        <ThreadChatPanel
-          key={t.otherProfileId}
-          supabase={supabase}
-          title={title}
-          currentUserId={currentUserId}
-          otherProfileId={t.otherProfileId}
-          threadId={meta?.threadId ?? null}
-        />
-      )
-    })
-
-    // If there are 2 students, show a clear split; otherwise stack.
-    const splitClass =
-      panels.length === 2 ? 'grid grid-rows-2 gap-4' : 'flex flex-col gap-4 overflow-hidden'
-
-    return <div className={cn('h-full', splitClass)}>{panels}</div>
-  }, [error, loading, currentUserId, lesson, targets, isTeacherView, threadMetaByOther, supabase])
-
-  return <div className={cn('h-full min-h-[320px]', className)}>{content}</div>
+  return <div className={cn('h-full min-h-0', className)}>{content}</div>
 }
 

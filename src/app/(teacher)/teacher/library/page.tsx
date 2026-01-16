@@ -88,9 +88,6 @@ export default function LibraryPage() {
   const worksheets = filteredMaterials?.filter((m) => m.type === 'worksheet')
   const uploads = filteredMaterials?.filter((m) => Boolean(m.file_url))
 
-  // Get unique folders
-  const folders = [...new Set(materials?.map((m) => m.folder).filter(Boolean))]
-
   const MaterialCard = ({ material }: { material: Material }) => {
     const { Icon, colorClass } = getTypeMeta(material.type)
     

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { Save, User, Bell, Calendar, Video, CreditCard, Link2, Receipt, LogOut } from 'lucide-react'
+import { Save, User, Calendar, Receipt, LogOut } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { Profile, TeacherSettings } from '@/types/database'
 
@@ -28,7 +28,7 @@ export default function SettingsPage() {
   const router = useRouter()
 
   // Fetch profile
-  const { data: profile, isLoading: profileLoading } = useQuery({
+  const { data: profile } = useQuery({
     queryKey: ['profile'],
     queryFn: async () => {
       const { data: userData } = await supabase.auth.getUser()
@@ -40,10 +40,18 @@ export default function SettingsPage() {
       if (error) throw error
       return data as Profile
     },
+    onSuccess: (loadedProfile) => {
+      if (!loadedProfile) return
+      setProfileForm({
+        full_name: loadedProfile.full_name,
+        email: loadedProfile.email,
+        timezone: loadedProfile.timezone,
+      })
+    },
   })
 
   // Fetch teacher settings
-  const { data: settings } = useQuery({
+  useQuery({
     queryKey: ['teacher-settings'],
     queryFn: async () => {
       const { data: userData } = await supabase.auth.getUser()
@@ -54,6 +62,15 @@ export default function SettingsPage() {
         .single()
       if (error && error.code !== 'PGRST116') throw error
       return data as TeacherSettings | null
+    },
+    onSuccess: (loadedSettings) => {
+      if (!loadedSettings) return
+      setSettingsForm({
+        cancellation_policy_hours: loadedSettings.cancellation_policy_hours,
+        default_lesson_duration: loadedSettings.default_lesson_duration,
+        booking_buffer_hours: loadedSettings.booking_buffer_hours,
+        max_advance_booking_days: loadedSettings.max_advance_booking_days,
+      })
     },
   })
 
@@ -69,28 +86,6 @@ export default function SettingsPage() {
     booking_buffer_hours: 2,
     max_advance_booking_days: 30,
   })
-
-  // Update forms when data loads
-  useEffect(() => {
-    if (profile) {
-      setProfileForm({
-        full_name: profile.full_name,
-        email: profile.email,
-        timezone: profile.timezone,
-      })
-    }
-  }, [profile])
-
-  useEffect(() => {
-    if (settings) {
-      setSettingsForm({
-        cancellation_policy_hours: settings.cancellation_policy_hours,
-        default_lesson_duration: settings.default_lesson_duration,
-        booking_buffer_hours: settings.booking_buffer_hours,
-        max_advance_booking_days: settings.max_advance_booking_days,
-      })
-    }
-  }, [settings])
 
   // Save profile mutation
   const saveProfileMutation = useMutation({

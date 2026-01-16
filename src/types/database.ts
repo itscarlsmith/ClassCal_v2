@@ -1,4 +1,4 @@
-export type Json =
+type Json =
   | string
   | number
   | boolean
@@ -6,7 +6,7 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type UserRole = 'teacher' | 'student' | 'parent'
+type UserRole = 'teacher' | 'student' | 'parent'
 export type LessonStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled'
 export type HomeworkStatus =
   | 'assigned'
@@ -15,9 +15,9 @@ export type HomeworkStatus =
   | 'overdue'
   | 'cancelled'
   | 'needs_revision'
-export type RecurrencePattern = 'once' | 'daily' | 'weekly' | 'biweekly' | 'monthly'
+type RecurrencePattern = 'once' | 'daily' | 'weekly' | 'biweekly' | 'monthly'
 
-export interface Database {
+interface Database {
   public: {
     Tables: {
       profiles: {
@@ -172,23 +172,6 @@ export interface Database {
           credits_used?: number
           meeting_url?: string | null
           updated_at?: string
-        }
-      }
-      lesson_students: {
-        Row: {
-          lesson_id: string
-          student_id: string
-          created_at: string
-        }
-        Insert: {
-          lesson_id: string
-          student_id: string
-          created_at?: string
-        }
-        Update: {
-          lesson_id?: string
-          student_id?: string
-          created_at?: string
         }
       }
       lesson_notes: {
@@ -719,39 +702,12 @@ export type Profile = Database['public']['Tables']['profiles']['Row']
 export type Student = Database['public']['Tables']['students']['Row']
 export type Parent = Database['public']['Tables']['parents']['Row']
 export type Lesson = Database['public']['Tables']['lessons']['Row']
-export type LessonStudent = Database['public']['Tables']['lesson_students']['Row']
-export type LessonNote = Database['public']['Tables']['lesson_notes']['Row']
-export type LessonTemplate = Database['public']['Tables']['lesson_templates']['Row']
 export type AvailabilityBlock = Database['public']['Tables']['availability_blocks']['Row']
 export type Homework = Database['public']['Tables']['homework']['Row']
 export type HomeworkSubmission = Database['public']['Tables']['homework_submissions']['Row']
 export type Material = Database['public']['Tables']['materials']['Row']
 export type Message = Database['public']['Tables']['messages']['Row']
-export type MessageThread = Database['public']['Tables']['message_threads']['Row']
 export type Package = Database['public']['Tables']['packages']['Row']
-export type Payment = Database['public']['Tables']['payments']['Row']
-export type CreditLedger = Database['public']['Tables']['credit_ledger']['Row']
 export type AutomationRule = Database['public']['Tables']['automation_rules']['Row']
-export type Notification = Database['public']['Tables']['notifications']['Row']
 export type TeacherSettings = Database['public']['Tables']['teacher_settings']['Row']
-
-// Insert types
-export type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
-export type StudentInsert = Database['public']['Tables']['students']['Insert']
-export type LessonInsert = Database['public']['Tables']['lessons']['Insert']
-export type LessonStudentInsert = Database['public']['Tables']['lesson_students']['Insert']
-export type HomeworkInsert = Database['public']['Tables']['homework']['Insert']
-export type MaterialInsert = Database['public']['Tables']['materials']['Insert']
-export type MessageInsert = Database['public']['Tables']['messages']['Insert']
-export type PaymentInsert = Database['public']['Tables']['payments']['Insert']
-
-// Lesson with student info for calendar/lists
-export type LessonWithStudent = Lesson & {
-  student: Pick<Student, 'id' | 'full_name' | 'avatar_url' | 'email'>
-}
-
-// Student with parent info
-export type StudentWithParents = Student & {
-  parents: Parent[]
-}
 
