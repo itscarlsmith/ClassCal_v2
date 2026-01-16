@@ -4,14 +4,15 @@ import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, Calendar, Clock, Video, FileText } from 'lucide-react'
+import { Plus, Calendar, Clock, FileText } from 'lucide-react'
 import { format, isPast, isFuture, isToday } from 'date-fns'
 import type { Lesson, Student } from '@/types/database'
-import { isJoinWindowOpen, useNow } from '@/lib/lesson-join'
+import { isJoinWindowOpen } from '@/lib/lesson-join'
+import { useNow } from '@/lib/lesson-join-client'
 import { useRouter } from 'next/navigation'
 
 type LessonWithStudent = Lesson & { student: Pick<Student, 'id' | 'full_name' | 'avatar_url' | 'email'> }
@@ -21,15 +22,29 @@ export default function LessonsPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  // Fetch lessons
-  const { data: lessons, isLoading } = useQuery({
-    queryKey: ['lessons'],
+  const { data: authUser } = useQuery({
+    queryKey: ['auth-user'],
     queryFn: async () => {
-      const { data: userData } = await supabase.auth.getUser()
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser()
+      if (error) throw error
+      return user
+    },
+  })
+
+  const teacherId = authUser?.id || null
+
+  // Fetch lessons
+  const { data: lessons, isLoading, error: lessonsError } = useQuery({
+    queryKey: ['lessons', teacherId],
+    enabled: !!teacherId,
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('lessons')
-        .select('*, student:students(id, full_name, avatar_url, email)')
-        .eq('teacher_id', userData.user?.id)
+        .select('*, student:students!lessons_student_id_fkey(id, full_name, avatar_url, email)')
+        .eq('teacher_id', teacherId)
         .order('start_time', { ascending: true })
       if (error) throw error
       return data as LessonWithStudent[]
@@ -105,18 +120,6 @@ export default function LessonsPage() {
           )}
         </div>
         <div className="flex gap-2">
-          {lesson.meeting_url && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation()
-                window.open(lesson.meeting_url!, '_blank')
-              }}
-            >
-              <Video className="w-4 h-4" />
-            </Button>
-          )}
           <Button
             variant="ghost"
             size="icon"
@@ -220,6 +223,13 @@ export default function LessonsPage() {
                 <div className="flex items-center justify-center h-48">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
                 </div>
+              ) : lessonsError ? (
+                <div className="text-center py-12 text-destructive">
+                  <p className="font-medium">Failed to load lessons</p>
+                  <p className="text-sm mt-2">
+                    {lessonsError instanceof Error ? lessonsError.message : 'Please try again.'}
+                  </p>
+                </div>
               ) : upcomingLessons && upcomingLessons.length > 0 ? (
                 <div className="space-y-3">
                   {upcomingLessons.map((lesson) => (
@@ -246,6 +256,13 @@ export default function LessonsPage() {
               {isLoading ? (
                 <div className="flex items-center justify-center h-48">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                </div>
+              ) : lessonsError ? (
+                <div className="text-center py-12 text-destructive">
+                  <p className="font-medium">Failed to load lessons</p>
+                  <p className="text-sm mt-2">
+                    {lessonsError instanceof Error ? lessonsError.message : 'Please try again.'}
+                  </p>
                 </div>
               ) : pastLessons && pastLessons.length > 0 ? (
                 <div className="space-y-3">

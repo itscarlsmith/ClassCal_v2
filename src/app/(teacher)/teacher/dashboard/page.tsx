@@ -1,6 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { DashboardContent } from './dashboard-content'
 
+const NOW = Date.now()
+const UPCOMING_END_ISO = new Date(NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
+const RECENT_PAYMENTS_START_ISO = new Date(NOW - 30 * 24 * 60 * 60 * 1000).toISOString()
+
 export default async function DashboardPage() {
   const supabase = await createClient()
   
@@ -14,14 +18,16 @@ export default async function DashboardPage() {
     .single()
   
   // Fetch upcoming lessons (next 7 days)
-  const { data: upcomingLessons } = await supabase
+  const { data: upcomingLessons, error: upcomingLessonsError } = await supabase
     .from('lessons')
-    .select('*, student:students(id, full_name, avatar_url)')
+    .select('*, student:students!lessons_student_id_fkey(id, full_name, avatar_url)')
     .eq('teacher_id', user?.id)
     .gte('start_time', new Date().toISOString())
-    .lte('start_time', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString())
+    .lte('start_time', UPCOMING_END_ISO)
     .order('start_time', { ascending: true })
     .limit(5)
+  const safeUpcomingLessons =
+    upcomingLessonsError || !upcomingLessons ? [] : upcomingLessons
   
   // Fetch student count
   const { count: studentCount } = await supabase
@@ -42,7 +48,7 @@ export default async function DashboardPage() {
     .select('amount')
     .eq('teacher_id', user?.id)
     .eq('status', 'completed')
-    .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+    .gte('created_at', RECENT_PAYMENTS_START_ISO)
   
   const totalEarnings = recentPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0
   
@@ -53,10 +59,14 @@ export default async function DashboardPage() {
     .eq('recipient_id', user?.id)
     .eq('is_read', false)
 
+  if (upcomingLessonsError) {
+    console.error('Failed to load upcoming lessons', upcomingLessonsError)
+  }
+
   return (
     <DashboardContent
       profile={profile}
-      upcomingLessons={upcomingLessons || []}
+      upcomingLessons={safeUpcomingLessons}
       studentCount={studentCount || 0}
       pendingHomework={pendingHomework || 0}
       totalEarnings={totalEarnings}

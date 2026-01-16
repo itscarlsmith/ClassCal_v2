@@ -40,12 +40,15 @@ export function LessonVideoCall({ lessonId, className }: LessonVideoCallProps) {
 
       const json = await res.json().catch(() => ({}))
 
-      if (!res.ok || !json?.token) {
-        const message = json?.error || 'Unable to start the call.'
+      const tokenValue = (json as Record<string, unknown>)?.token
+      const errorValue = (json as Record<string, unknown>)?.error
+
+      if (!res.ok || typeof tokenValue !== 'string' || tokenValue.length === 0) {
+        const message = typeof errorValue === 'string' && errorValue.length > 0 ? errorValue : 'Unable to start the call.'
         throw new Error(message)
       }
 
-      setToken(json.token as string)
+      setToken(tokenValue)
       setState('idle')
     } catch (err) {
       console.error('Failed to join LiveKit room', err)

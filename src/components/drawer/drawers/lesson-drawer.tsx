@@ -35,22 +35,7 @@ import {
 } from '@/components/ui/command'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
-import {
-  Calendar,
-  Clock,
-  User,
-  Video,
-  FileText,
-  BookOpen,
-  Trash2,
-  Save,
-  CheckCircle,
-  XCircle,
-  ExternalLink,
-  Check,
-  ChevronsUpDown,
-  X,
-} from 'lucide-react'
+import { FileText, Trash2, Save, CheckCircle, XCircle, Check, ChevronsUpDown, X } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LessonVideoCall } from '@/components/lesson/lesson-video-call'
 import { LessonChat } from '@/components/lesson/lesson-chat'
@@ -65,6 +50,14 @@ interface LessonDrawerProps {
 type LessonParticipant = {
   student_id: string
   student: Pick<Student, 'id' | 'full_name' | 'email' | 'avatar_url'> | null
+}
+
+type LessonParticipantRow = {
+  student_id: string
+  student:
+    | { id: string; full_name: string; email: string; avatar_url: string | null }
+    | { id: string; full_name: string; email: string; avatar_url: string | null }[]
+    | null
 }
 
 export function LessonDrawer({ id, data }: LessonDrawerProps) {
@@ -91,9 +84,11 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
     end_time: data?.endTime ? toLocalDateTimeString(new Date(data.endTime as string)) : '',
     status: 'pending' as LessonStatus,
     credits_used: 1,
-    meeting_url: '',
   })
   const [preAgreed, setPreAgreed] = useState(false)
+  const [groupLesson, setGroupLesson] = useState(false)
+  const [additionalStudentIds, setAdditionalStudentIds] = useState<string[]>([])
+  const [additionalStudentsOpen, setAdditionalStudentsOpen] = useState(false)
   const [isRecurring, setIsRecurring] = useState(false)
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([])
   const [materialsPopoverOpen, setMaterialsPopoverOpen] = useState(false)
@@ -106,7 +101,7 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
       if (isNew) return null
       const { data, error } = await supabase
         .from('lessons')
-        .select('*, student:students(id, full_name, email, avatar_url)')
+        .select('*, student:students!lessons_student_id_fkey(id, full_name, email, avatar_url)')
         .eq('id', id)
         .single()
       if (error) throw error
@@ -117,17 +112,22 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
 
   // Fetch students for dropdown
   const { data: students } = useQuery({
-    queryKey: ['students-list'],
+    queryKey: ['students-list', user?.id],
     queryFn: async () => {
+      const {
+        data: { user: authUser },
+        error: authError,
+      } = await supabase.auth.getUser()
+      if (authError || !authUser) throw authError || new Error('Not authenticated')
       const { data, error } = await supabase
         .from('students')
         .select('id, full_name, email, avatar_url, credits')
-        .eq('teacher_id', user?.id)
+        .eq('teacher_id', authUser.id)
         .order('full_name')
       if (error) throw error
       return data
     },
-    enabled: !!user?.id,
+    enabled: true,
   })
 
   // Fetch lesson notes
@@ -185,12 +185,13 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
         .select('student_id, student:students(id, full_name, email, avatar_url)')
         .eq('lesson_id', id)
       if (error) throw error
-      return (data || []).map((row: any) => {
+      const rows = (data || []) as LessonParticipantRow[]
+      return rows.map((row) => {
         const student = Array.isArray(row.student) ? row.student?.[0] : row.student
         return {
           student_id: row.student_id,
           student: student ?? null,
-        } as LessonParticipant
+        } satisfies LessonParticipant
       })
     },
   })
@@ -204,6 +205,7 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
   // Update form when lesson data loads
   useEffect(() => {
     if (lesson) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData({
         student_id: lesson.student_id,
         title: lesson.title,
@@ -212,7 +214,6 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
         end_time: toLocalDateTimeString(new Date(lesson.end_time)),
         status: lesson.status,
         credits_used: lesson.credits_used,
-        meeting_url: lesson.meeting_url || '',
       })
       setIsRecurring(lesson.is_recurring || false)
     }
@@ -221,9 +222,17 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
   // Update selected materials when lesson materials load
   useEffect(() => {
     if (lessonMaterials) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedMaterials(lessonMaterials)
     }
   }, [lessonMaterials])
+
+  // When primary student changes, ensure it's not also selected as an additional participant
+  useEffect(() => {
+    if (!groupLesson) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAdditionalStudentIds((prev) => prev.filter((id) => id !== formData.student_id))
+  }, [groupLesson, formData.student_id])
 
   // Save mutation
   const saveMutation = useMutation({
@@ -248,12 +257,12 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             student_id: payload.student_id,
+            additional_student_ids: groupLesson ? additionalStudentIds : [],
             title: payload.title,
             description: payload.description,
             start_time: payload.start_time,
             end_time: payload.end_time,
             credits_used: payload.credits_used,
-            meeting_url: payload.meeting_url,
             is_recurring: payload.is_recurring,
             status: payload.status,
           }),
@@ -284,7 +293,6 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
         const body: Record<string, unknown> = {
           title: payload.title,
           description: payload.description,
-          meeting_url: payload.meeting_url,
           start_time: payload.start_time,
           end_time: payload.end_time,
         }
@@ -417,6 +425,10 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
       toast.error('Credits must be at least 1')
       return
     }
+    if (groupLesson) {
+      // Defensive: ensure primary student isn't duplicated in additional list
+      setAdditionalStudentIds((prev) => prev.filter((id) => id !== formData.student_id))
+    }
     if (!isNew && lesson) {
       const isPast = new Date(lesson.start_time) <= new Date()
       if (isPast || lesson.status === 'cancelled' || lesson.status === 'completed') {
@@ -446,6 +458,12 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
   }
 
   const primaryStudentId = lesson?.student_id ?? null
+
+  const additionalStudentOptions = useMemo(() => {
+    if (!students) return []
+    const primary = formData.student_id
+    return students.filter((student) => student.id !== primary)
+  }, [students, formData.student_id])
 
   const detailsContent = (
     <div className="space-y-6">
@@ -543,6 +561,116 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
                       ))}
                     </SelectContent>
                   </Select>
+                  <div className="flex items-center space-x-2 pt-1">
+                    <Checkbox
+                      id="group_lesson"
+                      checked={groupLesson}
+                      onCheckedChange={(checked) => {
+                        const next = checked === true
+                        setGroupLesson(next)
+                        if (!next) {
+                          setAdditionalStudentIds([])
+                          setAdditionalStudentsOpen(false)
+                        } else {
+                          // Ensure no duplication with primary
+                          setAdditionalStudentIds((prev) => prev.filter((id) => id !== formData.student_id))
+                        }
+                      }}
+                    />
+                    <Label
+                      htmlFor="group_lesson"
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      Group Lesson
+                    </Label>
+                  </div>
+
+                  {groupLesson && (
+                    <div className="grid gap-2 pt-2">
+                      <Label htmlFor="additional_students">Additional students</Label>
+                      <Popover open={additionalStudentsOpen} onOpenChange={setAdditionalStudentsOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between"
+                            disabled={!formData.student_id}
+                          >
+                            {additionalStudentIds.length > 0
+                              ? `${additionalStudentIds.length} additional student${additionalStudentIds.length > 1 ? 's' : ''} selected`
+                              : 'Select additional students...'}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Search students..." />
+                            <CommandList>
+                              <CommandEmpty>No students found.</CommandEmpty>
+                              <CommandGroup>
+                                {additionalStudentOptions.map((student) => (
+                                  <CommandItem
+                                    key={student.id}
+                                    value={student.id}
+                                    onSelect={() => {
+                                      setAdditionalStudentIds((prev) =>
+                                        prev.includes(student.id)
+                                          ? prev.filter((id) => id !== student.id)
+                                          : [...prev, student.id]
+                                      )
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        'mr-2 h-4 w-4',
+                                        additionalStudentIds.includes(student.id)
+                                          ? 'opacity-100'
+                                          : 'opacity-0'
+                                      )}
+                                    />
+                                    <span className="flex items-center gap-2">
+                                      <span>{student.full_name}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        ({student.credits} credits)
+                                      </span>
+                                    </span>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+
+                      {additionalStudentIds.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {additionalStudentIds.map((studentId) => {
+                            const student = students?.find((s) => s.id === studentId)
+                            if (!student) return null
+                            return (
+                              <Badge
+                                key={studentId}
+                                variant="secondary"
+                                className="flex items-center gap-1"
+                              >
+                                {student.full_name}
+                                <button
+                                  onClick={() =>
+                                    setAdditionalStudentIds((prev) =>
+                                      prev.filter((id) => id !== studentId)
+                                    )
+                                  }
+                                  className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -715,7 +843,7 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
                       htmlFor="pre_agreed"
                       className="text-sm font-normal cursor-pointer"
                     >
-                      Pre-agreed with student
+                      Pre-agreed with {groupLesson ? 'students' : 'student'}
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -733,29 +861,6 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
                 </div>
               </div>
               )}
-
-              <div className="grid gap-2">
-                <Label htmlFor="meeting_url">Meeting URL</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="meeting_url"
-                    value={formData.meeting_url}
-                    onChange={(e) => setFormData({ ...formData, meeting_url: e.target.value })}
-                    placeholder="https://meet.google.com/..."
-                  />
-                  {formData.meeting_url && (
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      asChild
-                    >
-                      <a href={formData.meeting_url} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </Button>
-                  )}
-                </div>
-              </div>
             </div>
           </DrawerSection>
 

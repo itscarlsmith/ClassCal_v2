@@ -13,7 +13,8 @@ import { format, isAfter } from 'date-fns'
 import Link from 'next/link'
 import { Calendar, Clock } from 'lucide-react'
 import type { Lesson } from '@/types/database'
-import { isJoinWindowOpen, useNow } from '@/lib/lesson-join'
+import { isJoinWindowOpen } from '@/lib/lesson-join'
+import { useNow } from '@/lib/lesson-join-client'
 import { useRouter } from 'next/navigation'
 
 type LessonWithTeacher = Lesson & {
@@ -57,15 +58,29 @@ export default function StudentLessonsPage() {
     queryKey: ['student-lessons', studentIds],
     enabled: studentIds.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('lessons')
-        .select(
-          '*, teacher:profiles(id, full_name, avatar_url, email)'
-        )
-        .in('student_id', studentIds)
-        .order('start_time', { ascending: true })
-      if (error) throw error
-      return (data || []) as LessonWithTeacher[]
+      const [primary, group] = await Promise.all([
+        supabase
+          .from('lessons')
+          .select('*, teacher:profiles(id, full_name, avatar_url, email)')
+          .in('student_id', studentIds)
+          .order('start_time', { ascending: true }),
+        supabase
+          .from('lessons')
+          .select('*, teacher:profiles(id, full_name, avatar_url, email), lesson_students!inner(student_id)')
+          .in('lesson_students.student_id', studentIds)
+          .order('start_time', { ascending: true }),
+      ])
+
+      if (primary.error) throw primary.error
+      if (group.error) throw group.error
+
+      const combined = [
+        ...((primary.data || []) as LessonWithTeacher[]),
+        ...((group.data || []) as LessonWithTeacher[]),
+      ]
+      const deduped = Array.from(new Map(combined.map((l) => [l.id, l])).values())
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+      return deduped
     },
   })
 

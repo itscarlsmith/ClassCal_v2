@@ -6,12 +6,12 @@ import type { LessonStatus } from '@/types/database'
 
 interface CreateLessonBody {
   student_id?: string
+  additional_student_ids?: string[]
   title?: string
   description?: string | null
   start_time?: string
   end_time?: string
   credits_used?: number
-  meeting_url?: string | null
   is_recurring?: boolean
   status?: LessonStatus
 }
@@ -29,12 +29,12 @@ export async function POST(request: Request) {
     const body = (await request.json()) as CreateLessonBody
     const {
       student_id,
+      additional_student_ids,
       title,
       description,
       start_time,
       end_time,
       credits_used,
-      meeting_url,
       is_recurring,
       status,
     } = body
@@ -45,6 +45,12 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
+
+    const additionalIdsRaw = Array.isArray(additional_student_ids)
+      ? additional_student_ids
+      : []
+    const additionalIds = additionalIdsRaw.filter((id): id is string => typeof id === 'string' && id.length > 0)
+    const participantIds = Array.from(new Set([student_id, ...additionalIds]))
 
     const start = new Date(start_time)
     const end = new Date(end_time)
@@ -77,40 +83,72 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Credits must be at least 1.' }, { status: 400 })
     }
 
-    // Ensure the student exists and belongs to this teacher
-    const { data: studentRow, error: studentFetchError } = await serviceSupabase
+    // Ensure all participants exist and belong to this teacher
+    const { data: studentRows, error: studentsFetchError } = await serviceSupabase
       .from('students')
       .select('id, user_id, teacher_id')
-      .eq('id', student_id)
-      .single()
+      .in('id', participantIds)
 
-    if (studentFetchError || !studentRow) {
-      return NextResponse.json({ error: 'Student not found' }, { status: 404 })
+    if (studentsFetchError) {
+      console.error('Error fetching students for lesson creation', studentsFetchError)
+      return NextResponse.json({ error: 'Failed to verify participants' }, { status: 500 })
     }
 
-    if (studentRow.teacher_id !== userData.user.id) {
-      return NextResponse.json({ error: 'Student not linked to this teacher' }, { status: 403 })
+    const fetched = studentRows || []
+    if (fetched.length !== participantIds.length) {
+      return NextResponse.json({ error: 'One or more students not found' }, { status: 404 })
     }
 
-    // Collect all student_ids for the same student user (prevent double-booking with other teachers)
-    const { data: siblingStudents, error: siblingError } = await serviceSupabase
-      .from('students')
-      .select('id')
-      .eq('user_id', studentRow.user_id)
-
-    if (siblingError) {
-      console.error('Error fetching sibling students for overlap check', siblingError)
-      return NextResponse.json({ error: 'Failed to verify availability' }, { status: 500 })
+    if (fetched.some((row) => row.teacher_id !== userData.user.id)) {
+      return NextResponse.json({ error: 'One or more students not linked to this teacher' }, { status: 403 })
     }
 
-    const studentIdsForUser = (siblingStudents || []).map((s) => s.id)
+    // Prevent double-booking:
+    // - For each student user_id, include all their linked student rows (sibling student ids)
+    // - Also include student ids that do not have a user_id (no siblings to consider)
+    const userIds = Array.from(
+      new Set(fetched.map((row) => row.user_id).filter((id): id is string => typeof id === 'string' && id.length > 0))
+    )
+
+    let siblingRows: { id: string; user_id: string | null }[] = []
+    if (userIds.length > 0) {
+      const { data: siblings, error: siblingError } = await serviceSupabase
+        .from('students')
+        .select('id, user_id')
+        .in('user_id', userIds)
+
+      if (siblingError) {
+        console.error('Error fetching sibling students for overlap check', siblingError)
+        return NextResponse.json({ error: 'Failed to verify availability' }, { status: 500 })
+      }
+      siblingRows = (siblings || []) as any
+    }
+
+    const siblingsByUserId = new Map<string, string[]>()
+    for (const row of siblingRows) {
+      if (!row.user_id) continue
+      const list = siblingsByUserId.get(row.user_id) || []
+      list.push(row.id)
+      siblingsByUserId.set(row.user_id, list)
+    }
+
+    const overlapStudentIds = Array.from(
+      new Set(
+        fetched.flatMap((row) => {
+          if (row.user_id && siblingsByUserId.has(row.user_id)) {
+            return siblingsByUserId.get(row.user_id) || []
+          }
+          return [row.id]
+        })
+      )
+    )
 
     const initialStatus: LessonStatus = status === 'confirmed' ? 'confirmed' : 'pending'
 
     const { hasConflict, error: overlapError } = await checkLessonOverlap({
       supabase: serviceSupabase,
       teacherId: userData.user.id,
-      studentIds: studentIdsForUser,
+      studentIds: overlapStudentIds,
       start,
       end,
     })
@@ -137,7 +175,6 @@ export async function POST(request: Request) {
         start_time: start.toISOString(),
         end_time: end.toISOString(),
         credits_used: credits_used ?? 1,
-        meeting_url: meeting_url ?? null,
         is_recurring: is_recurring ?? false,
         status: initialStatus,
       })
@@ -147,6 +184,23 @@ export async function POST(request: Request) {
     if (insertError) {
       console.error('Error creating lesson', insertError)
       return NextResponse.json({ error: 'Failed to create lesson.' }, { status: 500 })
+    }
+
+    // Ensure all participants are represented in lesson_students (primary + additional)
+    const participantsToInsert = participantIds.map((id) => ({
+      lesson_id: newLesson.id,
+      student_id: id,
+    }))
+    const { error: participantInsertError } = await serviceSupabase
+      .from('lesson_students')
+      .upsert(participantsToInsert, {
+        onConflict: 'lesson_id,student_id',
+        ignoreDuplicates: true,
+      })
+
+    if (participantInsertError) {
+      console.error('Error inserting lesson participants', participantInsertError)
+      return NextResponse.json({ error: 'Failed to create lesson participants.' }, { status: 500 })
     }
 
     return NextResponse.json({ lesson: newLesson })

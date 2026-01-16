@@ -232,6 +232,28 @@ export async function POST(request: Request) {
       )
     }
 
+    // Ensure lesson participants are tracked (required for group lessons + credit deduction)
+    const { error: participantsError } = await serviceSupabase
+      .from('lesson_students')
+      .upsert(
+        {
+          lesson_id: newLesson.id,
+          student_id: student.id,
+        },
+        {
+          onConflict: 'lesson_id,student_id',
+          ignoreDuplicates: true,
+        }
+      )
+
+    if (participantsError) {
+      console.error('Error inserting lesson participant from booking', participantsError)
+      return NextResponse.json(
+        { error: 'Failed to create lesson participants. Please try again.' },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json({ lesson: newLesson })
   } catch (error) {
     console.error('Error in POST /api/bookings', error)

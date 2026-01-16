@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import { Plus, ChevronLeft, ChevronRight } from 'lucide-react'
-import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns'
+import { format, addMonths, subMonths } from 'date-fns'
 import {
   getAvailabilityRanges,
   toCalendarBackgroundEvents,
@@ -21,8 +21,10 @@ import {
 } from '@/lib/availability'
 import type { EventClickArg, DateSelectArg, EventDropArg, DatesSetArg } from '@fullcalendar/core'
 import type { Lesson, Student, AvailabilityBlock } from '@/types/database'
-import { isJoinWindowOpen, useNow } from '@/lib/lesson-join'
+import { isJoinWindowOpen } from '@/lib/lesson-join'
+import { useNow } from '@/lib/lesson-join-client'
 import { useRouter } from 'next/navigation'
+import { useFullCalendarAutosize } from '@/lib/use-fullcalendar-autosize'
 
 type LessonWithStudent = Lesson & { student: Pick<Student, 'id' | 'full_name' | 'avatar_url'> }
 
@@ -35,7 +37,8 @@ const statusColors: Record<string, { bg: string; border: string; text: string }>
 
 export default function CalendarPage() {
   const calendarRef = useRef<FullCalendar>(null)
-  const { openDrawer, calendarView, setCalendarView, calendarDate, setCalendarDate, user } = useAppStore()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const { openDrawer, calendarView, setCalendarView } = useAppStore()
   const router = useRouter()
   const queryClient = useQueryClient()
   const supabase = createClient()
@@ -46,15 +49,31 @@ export default function CalendarPage() {
   })
   const [showAvailability, setShowAvailability] = useState(true)
 
-  // Fetch lessons
-  const { data: lessons, isLoading } = useQuery({
-    queryKey: ['lessons'],
+  useFullCalendarAutosize({ calendarRef, containerRef })
+
+  const { data: authUser } = useQuery({
+    queryKey: ['auth-user'],
     queryFn: async () => {
-      const { data: userData } = await supabase.auth.getUser()
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser()
+      if (error) throw error
+      return user
+    },
+  })
+
+  const teacherId = authUser?.id || null
+
+  // Fetch lessons
+  const { data: lessons, error: lessonsError } = useQuery({
+    queryKey: ['lessons', teacherId],
+    enabled: !!teacherId,
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('lessons')
-        .select('*, student:students(id, full_name, avatar_url)')
-        .eq('teacher_id', userData.user?.id)
+        .select('*, student:students!lessons_student_id_fkey(id, full_name, avatar_url)')
+        .eq('teacher_id', teacherId)
         .order('start_time')
       if (error) throw error
       return data as LessonWithStudent[]
@@ -63,13 +82,13 @@ export default function CalendarPage() {
 
   // Fetch availability blocks
   const { data: availability } = useQuery({
-    queryKey: ['availability'],
+    queryKey: ['availability', teacherId],
+    enabled: !!teacherId,
     queryFn: async () => {
-      const { data: userData } = await supabase.auth.getUser()
       const { data, error } = await supabase
         .from('availability_blocks')
         .select('*')
-        .eq('teacher_id', userData.user?.id)
+        .eq('teacher_id', teacherId)
       if (error) throw error
       return data as AvailabilityBlock[]
     },
@@ -167,7 +186,7 @@ export default function CalendarPage() {
 
   const lessonEvents = visibleLessons.map((lesson) => ({
     id: lesson.id,
-    title: `${lesson.title} - ${lesson.student?.full_name}`,
+    title: lesson.student?.full_name || lesson.title || 'Lesson',
     start: lesson.start_time,
     end: lesson.end_time,
     backgroundColor: statusColors[lesson.status]?.bg || statusColors.pending.bg,
@@ -362,8 +381,14 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {lessonsError && (
+        <div className="px-8 py-3 border-b border-border/60 bg-destructive/10 text-destructive text-sm">
+          Failed to load lessons. {lessonsError instanceof Error ? lessonsError.message : ''}
+        </div>
+      )}
+
       {/* Calendar */}
-      <div className="flex-1 overflow-hidden px-6 pb-6 pt-2">
+      <div ref={containerRef} className="flex-1 overflow-hidden px-6 pb-6 pt-2">
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -390,20 +415,17 @@ export default function CalendarPage() {
               lesson &&
               lesson.status === 'confirmed' &&
               isJoinWindowOpen({ startTime: lesson.start_time, endTime: lesson.end_time, now })
+            const isTimeGridView = eventInfo.view.type.startsWith('timeGrid')
 
             return (
-              <div className="flex h-full w-full flex-col justify-between p-2 text-left">
-                <div>
-                  <p className="text-sm font-medium leading-tight">{eventInfo.event.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(new Date(eventInfo.event.start!), 'h:mm a')} -{' '}
-                    {format(new Date(eventInfo.event.end!), 'h:mm a')}
-                  </p>
-                </div>
-                {joinVisible && lesson && (
+              <div className="flex h-full w-full flex-col gap-1 rounded-sm p-1.5 text-left">
+                <p className="text-sm font-medium leading-tight text-foreground truncate">
+                  {eventInfo.event.title}
+                </p>
+                {joinVisible && lesson && isTimeGridView && (
                   <Button
                     size="sm"
-                    className="mt-1"
+                    className="mt-auto h-6 w-full px-2 text-[11px]"
                     onClick={(e) => {
                       e.preventDefault()
                       e.stopPropagation()

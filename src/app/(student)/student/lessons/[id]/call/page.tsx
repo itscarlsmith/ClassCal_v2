@@ -4,16 +4,18 @@ import { ArrowLeft } from 'lucide-react'
 import { LessonVideoCall } from '@/components/lesson/lesson-video-call'
 import { LessonChat } from '@/components/lesson/lesson-chat'
 import { Button } from '@/components/ui/button'
+import { CallSidebarBehavior } from '@/components/lesson/call-sidebar-behavior'
 
 interface CallPageProps {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
-export default function StudentLessonCallPage({ params }: CallPageProps) {
-  const { id } = params
+export default async function StudentLessonCallPage({ params }: CallPageProps) {
+  const { id } = await params
 
   return (
     <div className="flex min-h-full flex-col gap-6 p-6">
+      <CallSidebarBehavior />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/student/lessons">

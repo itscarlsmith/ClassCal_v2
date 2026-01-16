@@ -42,6 +42,8 @@ export function createLessonAccessToken({
     canPublishData: true,
   })
 
+  // livekit-server-sdk may return a Promise here depending on runtime;
+  // callers should `await` the result.
   return token.toJwt()
 }
 

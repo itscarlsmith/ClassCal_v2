@@ -9,7 +9,6 @@ interface PatchBody {
   end_time?: string
   title?: string
   description?: string | null
-  meeting_url?: string | null
   status?: LessonStatus
   action?: 'cancel'
 }
@@ -33,7 +32,7 @@ export async function PATCH(
 
     const { data: lesson, error: lessonError } = await serviceSupabase
       .from('lessons')
-      .select('id, teacher_id, student_id, status, start_time, end_time, title, description, meeting_url')
+      .select('id, teacher_id, student_id, status, start_time, end_time, title, description')
       .eq('id', lessonId)
       .single()
 
@@ -185,7 +184,6 @@ export async function PATCH(
     }
     if (typeof body.title === 'string') updatePayload.title = body.title
     if (body.description !== undefined) updatePayload.description = body.description
-    if (body.meeting_url !== undefined) updatePayload.meeting_url = body.meeting_url
 
     // Determine next status
     let nextStatus: LessonStatus = lesson.status

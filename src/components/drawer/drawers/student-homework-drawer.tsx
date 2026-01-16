@@ -16,6 +16,8 @@ import { createClient } from '@/lib/supabase/client'
 import type { Material } from '@/types/database'
 import { useAppStore } from '@/store/app-store'
 import { createMaterialSignedUrl } from '@/lib/storage/materials'
+import { isJoinWindowOpen } from '@/lib/lesson-join'
+import { useNow } from '@/lib/lesson-join-client'
 import {
   uploadHomeworkSubmissionFile,
   createHomeworkSubmissionSignedUrl,
@@ -37,6 +39,7 @@ export function StudentHomeworkDrawer({ id }: StudentHomeworkDrawerProps) {
   const [file, setFile] = useState<File | null>(null)
   const [materialOpeningId, setMaterialOpeningId] = useState<string | null>(null)
   const [openingSubmissionPath, setOpeningSubmissionPath] = useState<string | null>(null)
+  const now = useNow(30_000)
 
   const { data: homework, isLoading } = useQuery({
     queryKey: ['student-homework', id],
@@ -45,7 +48,7 @@ export function StudentHomeworkDrawer({ id }: StudentHomeworkDrawerProps) {
       const { data, error } = await supabase
         .from('homework')
         .select(
-          '*, teacher:profiles(id, full_name, avatar_url, email), lesson:lessons(id, title, meeting_url, start_time)'
+          '*, teacher:profiles(id, full_name, avatar_url, email), lesson:lessons(id, title, start_time, end_time, status)'
         )
         .eq('id', id)
         .single()
@@ -421,13 +424,21 @@ export function StudentHomeworkDrawer({ id }: StudentHomeworkDrawerProps) {
                     {format(new Date(homework.lesson.start_time), 'MMM d, h:mm a')}
                   </p>
                 </div>
-                {homework.lesson.meeting_url && (
-                  <Button asChild size="sm" variant="outline">
-                    <a href={homework.lesson.meeting_url} target="_blank" rel="noreferrer">
-                      Join
-                    </a>
-                  </Button>
-                )}
+                {homework.lesson.status === 'confirmed' &&
+                  isJoinWindowOpen({
+                    startTime: homework.lesson.start_time,
+                    endTime: homework.lesson.end_time,
+                    now,
+                  }) && (
+                    <Button asChild size="sm" variant="outline">
+                      <a
+                        href={`/student/lessons/${homework.lesson.id}/call`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Join
+                      </a>
+                    </Button>
+                  )}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">No linked lesson.</p>

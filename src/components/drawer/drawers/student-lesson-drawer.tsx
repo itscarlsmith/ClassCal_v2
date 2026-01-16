@@ -344,17 +344,6 @@ export function StudentLessonDrawer({ id }: StudentLessonDrawerProps) {
             <p className="text-sm">{homeworkSummary}</p>
           </DrawerSection>
 
-          {lesson.meeting_url && (
-            <Button
-              asChild
-              variant="outline"
-              className="w-full justify-center"
-            >
-              <a target="_blank" rel="noreferrer" href={lesson.meeting_url}>
-                Join Meeting
-              </a>
-            </Button>
-          )}
         </div>
   ) : null
 
