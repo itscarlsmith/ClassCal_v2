@@ -1,6 +1,6 @@
 'use client'
 
-import { RefObject, useEffect } from 'react'
+import { type RefObject, useEffect } from 'react'
 import type FullCalendar from '@fullcalendar/react'
 
 type UseFullCalendarAutosizeArgs = {

@@ -1,0 +1,105 @@
+0 verbose cli /usr/local/bin/node /usr/local/bin/npm
+1 info using npm@11.6.2
+2 info using node@v24.11.1
+3 silly config load:file:/usr/local/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/karelsovis/CursorBuilds/ClassCal_v2/.npmrc
+5 silly config load:file:/Users/karelsovis/.npmrc
+6 silly config load:file:/usr/local/etc/npmrc
+7 verbose title npm install knip ts-prune eslint-plugin-unused-imports eslint-plugin-import @typescript-eslint/eslint-plugin @typescript-eslint/parser
+8 verbose argv "install" "--save-dev" "knip" "ts-prune" "eslint-plugin-unused-imports" "eslint-plugin-import" "@typescript-eslint/eslint-plugin" "@typescript-eslint/parser" "--cache" ".npm-cache"
+9 verbose logfile logs-max:10 dir:/Users/karelsovis/CursorBuilds/ClassCal_v2/.npm-cache/_logs/2026-01-15T16_09_37_062Z-
+10 verbose logfile /Users/karelsovis/CursorBuilds/ClassCal_v2/.npm-cache/_logs/2026-01-15T16_09_37_062Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+13 verbose shrinkwrap failed to load node_modules/.package-lock.json out of date, updated: node_modules
+14 silly idealTree buildDeps
+15 silly fetch manifest knip@*
+16 silly packumentCache full:https://registry.npmjs.org/knip cache-miss
+17 http fetch GET 200 https://registry.npmjs.org/knip 199ms (cache miss)
+18 silly packumentCache full:https://registry.npmjs.org/knip set size:undefined disposed:false
+19 silly fetch manifest @types/node@^20
+20 silly packumentCache full:https://registry.npmjs.org/@types%2fnode cache-miss
+21 http fetch GET 200 https://registry.npmjs.org/@types%2fnode 361ms (cache miss)
+22 silly packumentCache full:https://registry.npmjs.org/@types%2fnode set size:undefined disposed:false
+23 silly fetch manifest typescript@^5
+24 silly packumentCache full:https://registry.npmjs.org/typescript cache-miss
+25 http fetch GET 200 https://registry.npmjs.org/typescript 261ms (cache miss)
+26 silly packumentCache full:https://registry.npmjs.org/typescript set size:undefined disposed:false
+27 silly fetch manifest ts-prune@*
+28 silly packumentCache full:https://registry.npmjs.org/ts-prune cache-miss
+29 http fetch GET 200 https://registry.npmjs.org/ts-prune 84ms (cache miss)
+30 silly packumentCache full:https://registry.npmjs.org/ts-prune set size:undefined disposed:false
+31 silly fetch manifest eslint-plugin-unused-imports@*
+32 silly packumentCache full:https://registry.npmjs.org/eslint-plugin-unused-imports cache-miss
+33 http fetch GET 200 https://registry.npmjs.org/eslint-plugin-unused-imports 62ms (cache miss)
+34 silly packumentCache full:https://registry.npmjs.org/eslint-plugin-unused-imports set size:undefined disposed:false
+35 silly fetch manifest @typescript-eslint/eslint-plugin@*
+36 silly packumentCache full:https://registry.npmjs.org/@typescript-eslint%2feslint-plugin cache-miss
+37 http fetch GET 200 https://registry.npmjs.org/@typescript-eslint%2feslint-plugin 690ms (cache miss)
+38 silly packumentCache full:https://registry.npmjs.org/@typescript-eslint%2feslint-plugin set size:undefined disposed:false
+39 silly fetch manifest @typescript-eslint/parser@*
+40 silly packumentCache full:https://registry.npmjs.org/@typescript-eslint%2fparser cache-miss
+41 http fetch GET 200 https://registry.npmjs.org/@typescript-eslint%2fparser 603ms (cache miss)
+42 silly packumentCache full:https://registry.npmjs.org/@typescript-eslint%2fparser set size:undefined disposed:false
+43 silly fetch manifest eslint@^9
+44 silly packumentCache full:https://registry.npmjs.org/eslint cache-miss
+45 http fetch GET 200 https://registry.npmjs.org/eslint 114ms (cache miss)
+46 silly packumentCache full:https://registry.npmjs.org/eslint set size:undefined disposed:false
+47 silly fetch manifest jiti@*
+48 silly packumentCache full:https://registry.npmjs.org/jiti cache-miss
+49 http fetch GET 200 https://registry.npmjs.org/jiti 79ms (cache miss)
+50 silly packumentCache full:https://registry.npmjs.org/jiti set size:undefined disposed:false
+51 silly fetch manifest eslint-plugin-import@*
+52 silly packumentCache full:https://registry.npmjs.org/eslint-plugin-import cache-miss
+53 http fetch GET 200 https://registry.npmjs.org/eslint-plugin-import 76ms (cache miss)
+54 silly packumentCache full:https://registry.npmjs.org/eslint-plugin-import set size:undefined disposed:false
+55 verbose stack Error: could not resolve
+55 verbose stack     at PlaceDep.failPeerConflict (/usr/local/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/place-dep.js:503:25)
+55 verbose stack     at new PlaceDep (/usr/local/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/place-dep.js:157:21)
+55 verbose stack     at #buildDepStep (/usr/local/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:945:18)
+55 verbose stack     at async Arborist.buildIdealTree (/usr/local/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:182:7)
+55 verbose stack     at async Promise.all (index 1)
+55 verbose stack     at async Arborist.reify (/usr/local/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/reify.js:114:5)
+55 verbose stack     at async Install.exec (/usr/local/lib/node_modules/npm/lib/commands/install.js:150:5)
+55 verbose stack     at async Npm.exec (/usr/local/lib/node_modules/npm/lib/npm.js:208:9)
+55 verbose stack     at async module.exports (/usr/local/lib/node_modules/npm/lib/cli/entry.js:67:5)
+56 error code ERESOLVE
+57 error ERESOLVE could not resolve
+58 error
+59 error While resolving: classcal@0.1.0
+59 error Found: @typescript-eslint/eslint-plugin@8.48.1
+59 error node_modules/@typescript-eslint/eslint-plugin
+59 error   @typescript-eslint/eslint-plugin@"8.48.1" from typescript-eslint@8.48.1
+59 error   node_modules/typescript-eslint
+59 error     typescript-eslint@"^8.46.0" from eslint-config-next@16.0.6
+59 error     node_modules/eslint-config-next
+59 error       dev eslint-config-next@"16.0.6" from the root project
+59 error   dev @typescript-eslint/eslint-plugin@"*" from the root project
+59 error
+59 error Could not resolve dependency:
+59 error dev @typescript-eslint/eslint-plugin@"*" from the root project
+59 error
+59 error Conflicting peer dependency: @typescript-eslint/parser@8.53.0
+59 error node_modules/@typescript-eslint/parser
+59 error   peer @typescript-eslint/parser@"^8.53.0" from @typescript-eslint/eslint-plugin@8.53.0
+59 error   node_modules/@typescript-eslint/eslint-plugin
+59 error     dev @typescript-eslint/eslint-plugin@"*" from the root project
+59 error
+59 error Fix the upstream dependency conflict, or retry
+59 error this command with --force or --legacy-peer-deps
+59 error to accept an incorrect (and potentially broken) dependency resolution.
+60 error
+60 error
+60 error For a full report see:
+60 error /Users/karelsovis/CursorBuilds/ClassCal_v2/.npm-cache/_logs/2026-01-15T16_09_37_062Z-eresolve-report.txt
+61 silly unfinished npm timer reify 1768493377309
+62 silly unfinished npm timer reify:loadTrees 1768493377311
+63 silly unfinished npm timer idealTree:buildDeps 1768493377410
+64 silly unfinished npm timer idealTree:#root 1768493377410
+65 verbose cwd /Users/karelsovis/CursorBuilds/ClassCal_v2
+66 verbose os Darwin 25.2.0
+67 verbose node v24.11.1
+68 verbose npm  v11.6.2
+69 verbose exit 1
+70 verbose code 1
+71 error A complete log of this run can be found in: /Users/karelsovis/CursorBuilds/ClassCal_v2/.npm-cache/_logs/2026-01-15T16_09_37_062Z-debug-0.log

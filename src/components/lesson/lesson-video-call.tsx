@@ -1,9 +1,13 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
-import { LiveKitRoom, VideoConference } from '@livekit/components-react'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import '@livekit/components-styles'
 
+import { CallControls } from '@/components/lesson/live-call/call-controls'
+import { RemoteStage } from '@/components/lesson/live-call/remote-stage'
+import { SelfViewThumbnail } from '@/components/lesson/live-call/self-view-thumbnail'
+import { useControlsVisibility, useFullscreen } from '@/components/lesson/live-call/hooks'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -20,6 +24,9 @@ export function LessonVideoCall({ lessonId, className }: LessonVideoCallProps) {
   const [error, setError] = useState<string | null>(null)
 
   const livekitUrl = useMemo(() => process.env.NEXT_PUBLIC_LIVEKIT_URL, [])
+  const stageRef = useRef<HTMLDivElement>(null)
+  const { toggleFullscreen } = useFullscreen(stageRef)
+  const { controlsVisible, handlePointerActivity } = useControlsVisibility({ panelOpen: false })
 
   const handleJoin = useCallback(async () => {
     if (!lessonId) return
@@ -74,7 +81,11 @@ export function LessonVideoCall({ lessonId, className }: LessonVideoCallProps) {
   }
 
   return (
-    <div className={cn('min-h-[320px] rounded-xl border border-border bg-card', className)}>
+    <div
+      className={cn('relative min-h-[320px] overflow-hidden rounded-xl border border-border bg-black text-white', className)}
+      onMouseMove={handlePointerActivity}
+      role="presentation"
+    >
       {token ? (
         <LiveKitRoom
           serverUrl={livekitUrl}
@@ -82,17 +93,27 @@ export function LessonVideoCall({ lessonId, className }: LessonVideoCallProps) {
           video
           audio
           onDisconnected={handleLeave}
-          className="h-full rounded-xl"
+          className="h-full w-full"
         >
-          <VideoConference />
+          <RoomAudioRenderer />
+          <RemoteStage ref={stageRef} onToggleFullscreen={toggleFullscreen} />
+          <SelfViewThumbnail />
+          <CallControls
+            visible={controlsVisible}
+            chatOpen={false}
+            materialsOpen={false}
+            showChat={false}
+            showMaterials={false}
+            onToggleChat={() => undefined}
+            onToggleMaterials={() => undefined}
+            onLeave={handleLeave}
+          />
         </LiveKitRoom>
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
           <div>
             <p className="text-lg font-semibold">Start the live lesson</p>
-            <p className="text-sm text-muted-foreground">
-              Join the LiveKit room to start collaborating face-to-face.
-            </p>
+            <p className="text-sm text-white/70">Join the LiveKit room to start collaborating face-to-face.</p>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button onClick={handleJoin} disabled={state === 'loading'}>

@@ -4,7 +4,7 @@
 -- ===========================================================
 
 -- Ensures every lesson has at least one participant row in lesson_students
--- (the primary lessons.student_id). This is required for group lessons and for
+-- (the primary lessons.student_id). This supported lesson_students-based logic.
 -- credit deduction based on lesson_students.
 
 CREATE OR REPLACE FUNCTION ensure_lesson_students_primary()

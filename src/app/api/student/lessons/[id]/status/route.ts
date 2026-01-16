@@ -31,9 +31,7 @@ export async function POST(
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    // Load lesson (service client) and verify the authenticated user is a participant:
-    // - either the primary lessons.student_id belongs to this user
-    // - or the user participates via lesson_students
+    // Load lesson (service client) and verify the authenticated user is the primary student
     const { data: lesson, error: lessonError } = await serviceSupabase
       .from('lessons')
       .select('id, status, start_time, end_time, teacher_id, student_id')
@@ -63,24 +61,7 @@ export async function POST(
     }
 
     const isPrimaryParticipant = studentIdsForUser.includes(lesson.student_id)
-    let isGroupParticipant = false
-
     if (!isPrimaryParticipant) {
-      const { count, error: groupCheckError } = await serviceSupabase
-        .from('lesson_students')
-        .select('lesson_id', { count: 'exact', head: true })
-        .eq('lesson_id', lessonId)
-        .in('student_id', studentIdsForUser)
-
-      if (groupCheckError) {
-        console.error('Error verifying lesson group participation', groupCheckError)
-        return NextResponse.json({ error: 'Failed to verify lesson participation' }, { status: 500 })
-      }
-
-      isGroupParticipant = (count ?? 0) > 0
-    }
-
-    if (!isPrimaryParticipant && !isGroupParticipant) {
       return NextResponse.json({ error: 'Lesson not found for this student' }, { status: 404 })
     }
 

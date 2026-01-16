@@ -7,12 +7,6 @@ interface TokenRequestBody {
   lesson_id?: string
 }
 
-function getErrorField(err: unknown, key: string): unknown {
-  if (typeof err !== 'object' || err === null) return undefined
-  const record = err as Record<string, unknown>
-  return key in record ? record[key] : undefined
-}
-
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
@@ -56,47 +50,21 @@ export async function POST(request: Request) {
       identity = `teacher-${user.id}`
       role = 'teacher'
     } else {
-      // Check lesson_students join table for membership
-      const { data: participant, error: participantError } = await serviceSupabase
-        .from('lesson_students')
-        .select('student_id, student:students!inner(id, user_id)')
-        .eq('lesson_id', lesson.id)
-        .eq('student.user_id', user.id)
+      // Authorize student via primary lesson.student_id
+      const { data: studentRow, error: studentError } = await serviceSupabase
+        .from('students')
+        .select('id')
+        .eq('id', lesson.student_id)
+        .eq('user_id', user.id)
         .maybeSingle()
 
-      const isLessonStudentsMissing =
-        Boolean(participantError) &&
-        (String(getErrorField(participantError, 'code')) === '42P01' ||
-          String(getErrorField(participantError, 'message') || '')
-            .toLowerCase()
-            .includes('lesson_students') ||
-          Number(getErrorField(participantError, 'status')) === 404)
-      if (participantError && !isLessonStudentsMissing) {
-        console.error('Error validating lesson participant', participantError)
-        return NextResponse.json({ error: 'Unable to validate participant' }, { status: 500 })
+      if (studentError) {
+        console.error('Error validating lesson student', studentError)
+        return NextResponse.json({ error: 'Unable to validate student' }, { status: 500 })
       }
 
-      if (participant?.student) {
-        const studentRel = (participant as unknown as { student?: unknown }).student
-        const student =
-          Array.isArray(studentRel) ? (studentRel[0] as Record<string, unknown> | undefined) : (studentRel as Record<string, unknown> | undefined)
-        const idValue = student ? student['id'] : undefined
-        studentId = typeof idValue === 'string' ? idValue : null
-      } else if (lesson.student_id) {
-        // Fallback to legacy single-student lessons
-        const { data: legacyStudent } = await serviceSupabase
-          .from('students')
-          .select('id, user_id')
-          .eq('id', lesson.student_id)
-          .eq('user_id', user.id)
-          .maybeSingle()
-
-        if (legacyStudent) {
-          studentId = legacyStudent.id
-        }
-      }
-
-      if (studentId) {
+      if (studentRow?.id) {
+        studentId = studentRow.id
         identity = `student-${studentId}`
         role = 'student'
       }
