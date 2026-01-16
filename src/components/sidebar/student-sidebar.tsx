@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Calendar,
   GraduationCap,
@@ -9,8 +9,11 @@ import {
   MessageSquare,
   Settings,
   LifeBuoy,
+  LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems = [
   { label: 'Calendar', href: '/student/calendar', icon: Calendar },
@@ -23,6 +26,13 @@ const navItems = [
 
 export function StudentSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const supabase = createClient()
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   return (
     <aside className="w-56 border-r border-sidebar-border bg-sidebar flex flex-col">
@@ -55,7 +65,19 @@ export function StudentSidebar() {
           )
         })}
       </nav>
+
+      <div className="border-t border-sidebar-border px-4 py-4">
+        <Button
+          variant="outline"
+          className="w-full justify-start gap-2 text-sm"
+          onClick={handleLogout}
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Sign out</span>
+        </Button>
+      </div>
     </aside>
   )
 }
+
 
