@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { StudentSidebar } from '@/components/sidebar/student-sidebar'
 import { StudentTopbar } from '@/components/sidebar/student-topbar'
+import { DrawerManager } from '@/components/drawer/drawer-manager'
 
 export default async function StudentLayout({
   children,
@@ -31,6 +32,19 @@ export default async function StudentLayout({
     redirect('/teacher/dashboard')
   }
 
+  if (user.email) {
+    const serviceSupabase = await createServiceClient()
+    const { error: linkError } = await serviceSupabase
+      .from('students')
+      .update({ user_id: user.id })
+      .eq('email', user.email)
+      .is('user_id', null)
+
+    if (linkError) {
+      console.error('Failed to link student account', linkError)
+    }
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <StudentSidebar />
@@ -38,6 +52,7 @@ export default async function StudentLayout({
         <StudentTopbar />
         <main className="flex-1 overflow-auto bg-muted/20">{children}</main>
       </div>
+      <DrawerManager />
     </div>
   )
 }

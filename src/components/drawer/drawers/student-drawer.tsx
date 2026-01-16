@@ -99,13 +99,25 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      // Try to find an existing student profile for this email so we can link accounts
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('email', data.email)
+        .eq('role', 'student')
+        .maybeSingle()
+
+      const payload = {
+        ...data,
+        teacher_id: user?.id,
+        // Link to an existing student account if present so the student can see their data
+        user_id: existingProfile?.id ?? null,
+      }
+
       if (isNew) {
         const { data: newStudent, error } = await supabase
           .from('students')
-          .insert({
-            ...data,
-            teacher_id: user?.id,
-          })
+          .insert(payload)
           .select()
           .single()
         if (error) throw error
@@ -113,7 +125,7 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
       } else {
         const { data: updated, error } = await supabase
           .from('students')
-          .update(data)
+          .update(payload)
           .eq('id', id)
           .select()
           .single()

@@ -8,7 +8,13 @@ export type Json =
 
 export type UserRole = 'teacher' | 'student' | 'parent'
 export type LessonStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled'
-export type HomeworkStatus = 'assigned' | 'submitted' | 'reviewed' | 'overdue'
+export type HomeworkStatus =
+  | 'assigned'
+  | 'submitted'
+  | 'reviewed'
+  | 'overdue'
+  | 'cancelled'
+  | 'needs_revision'
 export type RecurrencePattern = 'once' | 'daily' | 'weekly' | 'biweekly' | 'monthly'
 
 export interface Database {
@@ -168,6 +174,23 @@ export interface Database {
           updated_at?: string
         }
       }
+      lesson_students: {
+        Row: {
+          lesson_id: string
+          student_id: string
+          created_at: string
+        }
+        Insert: {
+          lesson_id: string
+          student_id: string
+          created_at?: string
+        }
+        Update: {
+          lesson_id?: string
+          student_id?: string
+          created_at?: string
+        }
+      }
       lesson_notes: {
         Row: {
           id: string
@@ -262,6 +285,8 @@ export interface Database {
           description: string | null
           due_date: string
           status: HomeworkStatus
+          completed_at: string | null
+          first_submitted_at: string | null
           created_at: string
           updated_at: string
         }
@@ -274,6 +299,8 @@ export interface Database {
           description?: string | null
           due_date: string
           status?: HomeworkStatus
+          completed_at?: string | null
+          first_submitted_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -285,6 +312,8 @@ export interface Database {
           description?: string | null
           due_date?: string
           status?: HomeworkStatus
+          completed_at?: string | null
+          first_submitted_at?: string | null
           updated_at?: string
         }
       }
@@ -295,10 +324,19 @@ export interface Database {
           student_id: string
           content: string | null
           file_urls: string[]
+          file_paths: string[]
+          original_filenames: string[]
           feedback: string | null
           grade: string | null
           submitted_at: string
           reviewed_at: string | null
+          revision_requested_at: string | null
+          revision_requested_by: string | null
+          reviewed_by: string | null
+          accepted_at: string | null
+          accepted_by: string | null
+          attempt: number
+          is_latest: boolean
         }
         Insert: {
           id?: string
@@ -306,19 +344,37 @@ export interface Database {
           student_id: string
           content?: string | null
           file_urls?: string[]
+          file_paths?: string[]
+          original_filenames?: string[]
           feedback?: string | null
           grade?: string | null
           submitted_at?: string
           reviewed_at?: string | null
+          revision_requested_at?: string | null
+          revision_requested_by?: string | null
+          reviewed_by?: string | null
+          accepted_at?: string | null
+          accepted_by?: string | null
+          attempt?: number
+          is_latest?: boolean
         }
         Update: {
           homework_id?: string
           student_id?: string
           content?: string | null
           file_urls?: string[]
+          file_paths?: string[]
+          original_filenames?: string[]
           feedback?: string | null
           grade?: string | null
           reviewed_at?: string | null
+          revision_requested_at?: string | null
+          revision_requested_by?: string | null
+          reviewed_by?: string | null
+          accepted_at?: string | null
+          accepted_by?: string | null
+          attempt?: number
+          is_latest?: boolean
         }
       }
       materials: {
@@ -332,6 +388,7 @@ export interface Database {
           external_url: string | null
           tags: string[]
           folder: string | null
+          content: Json | null
           created_at: string
           updated_at: string
         }
@@ -345,6 +402,7 @@ export interface Database {
           external_url?: string | null
           tags?: string[]
           folder?: string | null
+          content?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -357,6 +415,7 @@ export interface Database {
           external_url?: string | null
           tags?: string[]
           folder?: string | null
+          content?: Json | null
           updated_at?: string
         }
       }
@@ -378,34 +437,55 @@ export interface Database {
           material_id?: string
         }
       }
+      homework_materials: {
+        Row: {
+          id: string
+          homework_id: string
+          material_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          homework_id: string
+          material_id: string
+          created_at?: string
+        }
+        Update: {
+          homework_id?: string
+          material_id?: string
+        }
+      }
       messages: {
         Row: {
           id: string
           sender_id: string
-          recipient_id: string
+          recipient_id: string | null
           thread_id: string
           content: string
           file_url: string | null
           is_read: boolean
           created_at: string
+          lesson_id: string | null
         }
         Insert: {
           id?: string
           sender_id: string
-          recipient_id: string
+          recipient_id?: string | null
           thread_id: string
           content: string
           file_url?: string | null
           is_read?: boolean
           created_at?: string
+          lesson_id?: string | null
         }
         Update: {
           sender_id?: string
-          recipient_id?: string
+          recipient_id?: string | null
           thread_id?: string
           content?: string
           file_url?: string | null
           is_read?: boolean
+          lesson_id?: string | null
         }
       }
       message_threads: {
@@ -414,16 +494,19 @@ export interface Database {
           participant_ids: string[]
           last_message_at: string
           created_at: string
+          lesson_id: string | null
         }
         Insert: {
           id?: string
           participant_ids: string[]
           last_message_at?: string
           created_at?: string
+          lesson_id?: string | null
         }
         Update: {
           participant_ids?: string[]
           last_message_at?: string
+          lesson_id?: string | null
         }
       }
       packages: {
@@ -636,6 +719,7 @@ export type Profile = Database['public']['Tables']['profiles']['Row']
 export type Student = Database['public']['Tables']['students']['Row']
 export type Parent = Database['public']['Tables']['parents']['Row']
 export type Lesson = Database['public']['Tables']['lessons']['Row']
+export type LessonStudent = Database['public']['Tables']['lesson_students']['Row']
 export type LessonNote = Database['public']['Tables']['lesson_notes']['Row']
 export type LessonTemplate = Database['public']['Tables']['lesson_templates']['Row']
 export type AvailabilityBlock = Database['public']['Tables']['availability_blocks']['Row']
@@ -655,6 +739,7 @@ export type TeacherSettings = Database['public']['Tables']['teacher_settings']['
 export type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
 export type StudentInsert = Database['public']['Tables']['students']['Insert']
 export type LessonInsert = Database['public']['Tables']['lessons']['Insert']
+export type LessonStudentInsert = Database['public']['Tables']['lesson_students']['Insert']
 export type HomeworkInsert = Database['public']['Tables']['homework']['Insert']
 export type MaterialInsert = Database['public']['Tables']['materials']['Insert']
 export type MessageInsert = Database['public']['Tables']['messages']['Insert']

@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { 
   LayoutDashboard, 
   Calendar, 
@@ -41,19 +42,35 @@ import {
   BookOpenCheck,
   Clock,
   LogOut,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { NavItem, NavSubItem } from './nav-item'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
+import { useAppStore } from '@/store/app-store'
+import { cn } from '@/lib/utils'
 
 // ClassCal Logo Component
-function ClassCalLogo() {
+function ClassCalLogo({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean
+  onToggle: () => void
+}) {
   return (
-    <div className="flex items-center gap-3 px-3 py-4">
-      <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
+    <div
+      className={cn(
+        'relative flex items-center px-3 py-4',
+        collapsed ? 'justify-center' : 'justify-between'
+      )}
+    >
+      <div className={cn('flex items-center gap-3', collapsed && 'justify-center')}>
+        <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
         <svg 
           viewBox="0 0 24 24" 
           className="w-5 h-5 text-primary-foreground"
@@ -73,8 +90,22 @@ function ClassCalLogo() {
           <path d="M8 18h.01" />
           <path d="M12 18h.01" />
         </svg>
+        </div>
+        {!collapsed && <span className="text-lg font-semibold tracking-tight">ClassCal</span>}
       </div>
-      <span className="text-lg font-semibold tracking-tight">ClassCal</span>
+
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        onClick={onToggle}
+        className={cn(
+          'text-muted-foreground hover:text-foreground',
+          collapsed ? 'absolute right-2 top-3' : ''
+        )}
+      >
+        {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+      </Button>
     </div>
   )
 }
@@ -82,18 +113,77 @@ function ClassCalLogo() {
 export function Sidebar() {
   const teacherHref = (path: string) => `/teacher${path}`
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClient()
+  const { sidebarCollapsed, setSidebarCollapsed, toggleSidebarCollapsed } = useAppStore()
+
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
+  const [needsRevisionHomeworkCount, setNeedsRevisionHomeworkCount] = useState(0)
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem('classcal.sidebarCollapsed')
+      if (stored === '1') setSidebarCollapsed(true)
+      if (stored === '0') setSidebarCollapsed(false)
+    } catch {
+      // ignore
+    }
+    // only on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
   }
 
-  return (
-    <aside className="w-64 h-screen flex flex-col border-r border-sidebar-border bg-sidebar">
-      <ClassCalLogo />
+  useEffect(() => {
+    let cancelled = false
 
-      <ScrollArea className="flex-1 min-h-0 px-3">
+    const loadBadges = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user || cancelled) return
+
+      const [{ count: unreadCount }, { count: needsRevisionCount }] = await Promise.all([
+        supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('recipient_id', user.id)
+          .eq('is_read', false),
+        supabase
+          .from('homework')
+          .select('*', { count: 'exact', head: true })
+          .eq('teacher_id', user.id)
+          .eq('status', 'needs_revision'),
+      ])
+
+      if (cancelled) return
+
+      setUnreadMessagesCount(unreadCount ?? 0)
+      setNeedsRevisionHomeworkCount(needsRevisionCount ?? 0)
+    }
+
+    loadBadges()
+
+    return () => {
+      cancelled = true
+    }
+    // Recompute on navigation so counts update after visiting inbox/review pages.
+  }, [pathname, supabase])
+
+  return (
+    <aside
+      className={cn(
+        'h-screen flex flex-col border-r border-sidebar-border bg-sidebar overflow-hidden transition-[width] duration-200 ease-in-out',
+        sidebarCollapsed ? 'w-16' : 'w-64'
+      )}
+    >
+      <ClassCalLogo collapsed={sidebarCollapsed} onToggle={toggleSidebarCollapsed} />
+
+      <ScrollArea className={cn('flex-1 min-h-0', sidebarCollapsed ? 'px-2' : 'px-3')}>
         <nav className="space-y-1 pb-4">
           {/* Dashboard */}
           <NavItem 
@@ -150,10 +240,14 @@ export function Sidebar() {
             label="Homework" 
             icon={<BookOpen className="w-5 h-5" />}
             sectionKey="homework"
-            badge={2}
+            badge={needsRevisionHomeworkCount}
           >
             <NavSubItem label="All Assignments" href={teacherHref('/homework')} />
-            <NavSubItem label="To Review" href={teacherHref('/homework/review')} badge={2} />
+            <NavSubItem
+              label="To Review"
+              href={teacherHref('/homework/review')}
+              badge={needsRevisionHomeworkCount}
+            />
             <NavSubItem label="Submitted" href={teacherHref('/homework/submitted')} />
             <NavSubItem label="Overdue" href={teacherHref('/homework/overdue')} />
             <NavSubItem label="Templates" href={teacherHref('/homework/templates')} />
@@ -164,9 +258,13 @@ export function Sidebar() {
             label="Messages" 
             icon={<MessageSquare className="w-5 h-5" />}
             sectionKey="messages"
-            badge={3}
+            badge={unreadMessagesCount}
           >
-            <NavSubItem label="Inbox" href={teacherHref('/messages')} badge={3} />
+            <NavSubItem
+              label="Inbox"
+              href={teacherHref('/messages')}
+              badge={unreadMessagesCount}
+            />
             <NavSubItem label="Students" href={teacherHref('/messages/students')} />
             <NavSubItem label="Parents" href={teacherHref('/messages/parents')} />
             <NavSubItem label="Groups" href={teacherHref('/messages/groups')} />
@@ -255,4 +353,3 @@ export function Sidebar() {
     </aside>
   )
 }
-

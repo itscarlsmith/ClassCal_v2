@@ -9,9 +9,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Plus, BookOpen, Clock, CheckCircle, AlertTriangle } from 'lucide-react'
-import { format, isPast } from 'date-fns'
-import { toast } from 'sonner'
-import type { Homework, Student, HomeworkStatus } from '@/types/database'
+import { format } from 'date-fns'
+import type { Homework, Student } from '@/types/database'
+import {
+  effectiveHomeworkStatus,
+  normalizeHomeworkStatus,
+  presentHomeworkStatus,
+} from '@/lib/homework-status'
 
 type HomeworkWithStudent = Homework & { student: Pick<Student, 'id' | 'full_name' | 'avatar_url'> }
 
@@ -37,27 +41,24 @@ export default function HomeworkPage() {
 
   // Group homework by status
   const allHomework = homework || []
-  const toReview = allHomework.filter((h) => h.status === 'submitted')
-  const submitted = allHomework.filter((h) => h.status === 'submitted' || h.status === 'reviewed')
-  const overdue = allHomework.filter((h) => h.status === 'assigned' && isPast(new Date(h.due_date)))
-  const assigned = allHomework.filter((h) => h.status === 'assigned')
+  const toReview = allHomework.filter((h) => normalizeHomeworkStatus(h.status) === 'submitted')
+  const overdue = allHomework.filter((h) => effectiveHomeworkStatus(h.status, h.due_date) === 'overdue')
+  const assigned = allHomework.filter((h) =>
+    ['assigned', 'needs_revision'].includes(normalizeHomeworkStatus(h.status))
+  )
+  const reviewed = allHomework.filter((h) => normalizeHomeworkStatus(h.status) === 'reviewed')
 
   const getInitials = (name: string) => {
     return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
   }
 
-  const getStatusBadgeClass = (status: HomeworkStatus) => {
-    switch (status) {
-      case 'reviewed': return 'badge-completed'
-      case 'submitted': return 'badge-confirmed'
-      case 'overdue': return 'badge-cancelled'
-      default: return 'badge-pending'
-    }
-  }
-
   const HomeworkCard = ({ hw }: { hw: HomeworkWithStudent }) => {
-    const isOverdue = hw.status === 'assigned' && isPast(new Date(hw.due_date))
-    
+    const presentation = presentHomeworkStatus({
+      status: hw.status,
+      dueDate: hw.due_date,
+      role: 'teacher',
+    })
+
     return (
       <div
         className="flex items-center gap-4 p-4 rounded-xl bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
@@ -70,8 +71,8 @@ export default function HomeworkPage() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="font-medium truncate">{hw.title}</h3>
-            <Badge className={isOverdue ? 'badge-cancelled' : getStatusBadgeClass(hw.status)}>
-              {isOverdue ? 'overdue' : hw.status}
+            <Badge className={presentation.badge}>
+              {presentation.label}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
@@ -135,9 +136,7 @@ export default function HomeworkPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Reviewed</p>
-              <p className="text-2xl font-bold">
-                {allHomework.filter((h) => h.status === 'reviewed').length}
-              </p>
+              <p className="text-2xl font-bold">{reviewed.length}</p>
             </div>
           </CardContent>
         </Card>
@@ -157,13 +156,14 @@ export default function HomeworkPage() {
       {/* Homework Tabs */}
       <Card>
         <CardContent className="p-6">
-          <Tabs defaultValue="all">
+          <Tabs defaultValue="review">
             <TabsList className="mb-6">
               <TabsTrigger value="all">All ({allHomework.length})</TabsTrigger>
+              <TabsTrigger value="assigned">Assigned ({assigned.length})</TabsTrigger>
               <TabsTrigger value="review">
                 To Review ({toReview.length})
               </TabsTrigger>
-              <TabsTrigger value="assigned">Assigned ({assigned.length})</TabsTrigger>
+              <TabsTrigger value="reviewed">Reviewed ({reviewed.length})</TabsTrigger>
               <TabsTrigger value="overdue">Overdue ({overdue.length})</TabsTrigger>
             </TabsList>
 
@@ -220,6 +220,21 @@ export default function HomeworkPage() {
                 <div className="text-center py-12">
                   <Clock className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
                   <p className="text-muted-foreground">No pending assignments</p>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="reviewed">
+              {reviewed.length > 0 ? (
+                <div className="space-y-3">
+                  {reviewed.map((hw) => (
+                    <HomeworkCard key={hw.id} hw={hw} />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <CheckCircle className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <p className="text-muted-foreground">No reviewed homework yet</p>
                 </div>
               )}
             </TabsContent>

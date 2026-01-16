@@ -35,7 +35,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
         } = await supabase.auth.getUser()
 
         if (authError) {
-          console.error('Error loading auth user', authError)
+          const isSessionMissingError =
+            (authError as any).name === 'AuthSessionMissingError' ||
+            authError.message?.toLowerCase().includes('auth session missing')
+
+          // Treat missing session as "no authenticated user" without logging a noisy error
+          if (!isSessionMissingError) {
+            console.error('Error loading auth user', authError)
+          }
+
           if (!isCancelled) setUser(null)
           return
         }

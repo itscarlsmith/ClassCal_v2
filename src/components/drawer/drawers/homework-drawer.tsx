@@ -19,19 +19,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
-import {
-  Calendar,
-  FileText,
-  Trash2,
-  Save,
-  CheckCircle,
-  Clock,
-  Download,
-  MessageSquare,
-} from 'lucide-react'
-import type { Homework, Student, HomeworkSubmission, HomeworkStatus } from '@/types/database'
+import { Trash2, Save, Download, MessageSquare, ChevronsUpDown, Check, X, CheckCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import type {
+  Homework,
+  Student,
+  HomeworkSubmission,
+  Material,
+} from '@/types/database'
+import { createHomeworkSubmissionSignedUrl } from '@/lib/storage/homework-submissions'
+import { isHomeworkOverdue, normalizeHomeworkStatus, presentHomeworkStatus } from '@/lib/homework-status'
 
 interface HomeworkDrawerProps {
   id: string | null
@@ -49,11 +61,13 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
     title: '',
     description: '',
     due_date: '',
-    status: 'assigned' as HomeworkStatus,
   })
 
   const [feedback, setFeedback] = useState('')
   const [grade, setGrade] = useState('')
+  const [selectedMaterials, setSelectedMaterials] = useState<string[]>([])
+  const [materialsPopoverOpen, setMaterialsPopoverOpen] = useState(false)
+  const [openingSubmissionPath, setOpeningSubmissionPath] = useState<string | null>(null)
 
   // Fetch homework data
   const { data: homework, isLoading } = useQuery({
@@ -80,11 +94,10 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
         .from('homework_submissions')
         .select('*')
         .eq('homework_id', id)
-        .order('submitted_at', { ascending: false })
-        .limit(1)
-        .single()
-      if (error && error.code !== 'PGRST116') throw error
-      return data as HomeworkSubmission | null
+        .eq('is_latest', true)
+        .maybeSingle()
+      if (error) throw error
+      return (data as HomeworkSubmission) || null
     },
     enabled: !isNew && !!id,
   })
@@ -104,6 +117,34 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
     enabled: !!user?.id && isNew,
   })
 
+  const { data: materials } = useQuery({
+    queryKey: ['teacher-materials', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('materials')
+        .select('*')
+        .eq('teacher_id', user?.id)
+        .order('title')
+      if (error) throw error
+      return (data || []) as Material[]
+    },
+    enabled: !!user?.id,
+  })
+
+  const { data: homeworkMaterials } = useQuery({
+    queryKey: ['homework-materials', id],
+    queryFn: async () => {
+      if (isNew) return []
+      const { data, error } = await supabase
+        .from('homework_materials')
+        .select('material_id')
+        .eq('homework_id', id)
+      if (error) throw error
+      return (data || []).map((hm) => hm.material_id as string)
+    },
+    enabled: !isNew && !!id,
+  })
+
   // Update form when homework data loads
   useEffect(() => {
     if (homework) {
@@ -112,7 +153,6 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
         title: homework.title,
         description: homework.description || '',
         due_date: new Date(homework.due_date).toISOString().slice(0, 16),
-        status: homework.status,
       })
     }
   }, [homework])
@@ -124,13 +164,39 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
     }
   }, [submission])
 
+  useEffect(() => {
+    if (homeworkMaterials) {
+      setSelectedMaterials(homeworkMaterials)
+    }
+  }, [homeworkMaterials])
+
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      if (!user?.id) throw new Error('Missing teacher identity')
       const payload = {
         ...data,
         due_date: new Date(data.due_date).toISOString(),
         teacher_id: user?.id,
+      }
+
+      const syncMaterials = async (homeworkId: string) => {
+        const { error: deleteError } = await supabase
+          .from('homework_materials')
+          .delete()
+          .eq('homework_id', homeworkId)
+        if (deleteError) throw deleteError
+
+        if (selectedMaterials.length > 0) {
+          const rows = selectedMaterials.map((materialId) => ({
+            homework_id: homeworkId,
+            material_id: materialId,
+          }))
+          const { error: insertError } = await supabase
+            .from('homework_materials')
+            .insert(rows)
+          if (insertError) throw insertError
+        }
       }
 
       if (isNew) {
@@ -140,6 +206,9 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
           .select()
           .single()
         if (error) throw error
+        if (newHomework?.id) {
+          await syncMaterials(newHomework.id)
+        }
         return newHomework
       } else {
         const { data: updated, error } = await supabase
@@ -149,12 +218,18 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
           .select()
           .single()
         if (error) throw error
+        if (id) {
+          await syncMaterials(id as string)
+        }
         return updated
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['homework'] })
       queryClient.invalidateQueries({ queryKey: ['homework', id] })
+      if (id) {
+        queryClient.invalidateQueries({ queryKey: ['homework-materials', id] })
+      }
       toast.success(isNew ? 'Homework assigned' : 'Homework updated')
       if (isNew) closeDrawer()
     },
@@ -197,12 +272,6 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
         .eq('id', submission.id)
       if (subError) throw subError
 
-      // Update homework status
-      const { error: hwError } = await supabase
-        .from('homework')
-        .update({ status: 'reviewed' })
-        .eq('id', id)
-      if (hwError) throw hwError
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['homework'] })
@@ -212,6 +281,53 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
     },
     onError: (error) => {
       toast.error('Failed to submit review')
+      console.error(error)
+    },
+  })
+
+  const saveFeedbackMutation = useMutation({
+    mutationFn: async () => {
+      if (!submission) return
+      const { error } = await supabase
+        .from('homework_submissions')
+        .update({
+          feedback,
+          grade,
+        })
+        .eq('id', submission.id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['homework-submission', id] })
+      toast.success('Feedback saved')
+    },
+    onError: (error) => {
+      toast.error('Failed to save feedback')
+      console.error(error)
+    },
+  })
+
+  const requestRevisionMutation = useMutation({
+    mutationFn: async () => {
+      if (!submission) return
+      if (!feedback.trim()) throw new Error('Please add feedback before requesting revisions')
+      const { error } = await supabase
+        .from('homework_submissions')
+        .update({
+          feedback,
+          revision_requested_at: new Date().toISOString(),
+        })
+        .eq('id', submission.id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['homework', id] })
+      queryClient.invalidateQueries({ queryKey: ['homework-submission', id] })
+      toast.success('Revision requested')
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Failed to request revision'
+      toast.error(message)
       console.error(error)
     },
   })
@@ -233,12 +349,20 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
       .slice(0, 2)
   }
 
-  const getStatusBadgeClass = (status: HomeworkStatus) => {
-    switch (status) {
-      case 'reviewed': return 'badge-completed'
-      case 'submitted': return 'badge-confirmed'
-      case 'overdue': return 'badge-cancelled'
-      default: return 'badge-pending'
+  const openSubmissionFile = async (path: string) => {
+    try {
+      setOpeningSubmissionPath(path)
+      const signedUrl = await createHomeworkSubmissionSignedUrl({
+        supabase,
+        path,
+        expiresIn: 60 * 10,
+      })
+      window.open(signedUrl, '_blank', 'noopener,noreferrer')
+    } catch (error) {
+      console.error(error)
+      toast.error('Unable to open file')
+    } finally {
+      setOpeningSubmissionPath(null)
     }
   }
 
@@ -301,9 +425,14 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
                 <p className="font-medium">{homework.student.full_name}</p>
                 <p className="text-sm text-muted-foreground">{homework.student.email}</p>
               </div>
-              <Badge className={getStatusBadgeClass(homework.status)}>
-                {homework.status}
-              </Badge>
+              {(() => {
+                const presentation = presentHomeworkStatus({
+                  status: homework.status,
+                  dueDate: homework.due_date,
+                  role: 'teacher',
+                })
+                return <Badge className={presentation.badge}>{presentation.label}</Badge>
+              })()}
             </div>
           )}
 
@@ -325,20 +454,24 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
                     </div>
                   )}
                   
-                  {submission.file_urls && submission.file_urls.length > 0 && (
+                  {((submission.file_paths && submission.file_paths.length > 0) ||
+                    (submission.file_urls && submission.file_urls.length > 0)) && (
                     <div className="flex flex-wrap gap-2">
-                      {submission.file_urls.map((url, index) => (
-                        <a
-                          key={index}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-card rounded-md text-sm hover:bg-muted transition-colors"
+                      {(submission.file_paths?.length ? submission.file_paths : submission.file_urls).map(
+                        (path, index) => (
+                        <Button
+                          key={path}
+                          variant="outline"
+                          size="sm"
+                          className="inline-flex items-center gap-1.5"
+                          onClick={() => openSubmissionFile(path)}
+                          disabled={openingSubmissionPath === path}
                         >
                           <Download className="w-3 h-3" />
-                          File {index + 1}
-                        </a>
-                      ))}
+                          {openingSubmissionPath === path ? 'Opening…' : `File ${index + 1}`}
+                        </Button>
+                        )
+                      )}
                     </div>
                   )}
                 </div>
@@ -366,16 +499,41 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
                       rows={4}
                     />
                   </div>
-                  {homework?.status === 'submitted' && (
+
+                  <div className="flex flex-col gap-2">
                     <Button
-                      onClick={() => reviewMutation.mutate()}
-                      disabled={reviewMutation.isPending}
+                      variant="outline"
+                      onClick={() => saveFeedbackMutation.mutate()}
+                      disabled={saveFeedbackMutation.isPending}
                       className="w-full"
                     >
-                      <MessageSquare className="w-4 h-4 mr-2" />
-                      Submit Review
+                      <Save className="w-4 h-4 mr-2" />
+                      {saveFeedbackMutation.isPending ? 'Saving…' : 'Save feedback'}
                     </Button>
-                  )}
+
+                    {normalizeHomeworkStatus(homework?.status) === 'submitted' && (
+                      <>
+                        <Button
+                          onClick={() => reviewMutation.mutate()}
+                          disabled={reviewMutation.isPending}
+                          className="w-full"
+                        >
+                          <MessageSquare className="w-4 h-4 mr-2" />
+                          {reviewMutation.isPending ? 'Submitting…' : 'Mark reviewed'}
+                        </Button>
+
+                        <Button
+                          variant="secondary"
+                          onClick={() => requestRevisionMutation.mutate()}
+                          disabled={requestRevisionMutation.isPending}
+                          className="w-full"
+                        >
+                          Request revision
+                        </Button>
+                      </>
+                    )}
+
+                  </div>
                 </div>
               </DrawerSection>
 
@@ -438,27 +596,73 @@ export function HomeworkDrawer({ id, data }: HomeworkDrawerProps) {
                 />
               </div>
 
-              {!isNew && (
-                <div className="grid gap-2">
-                  <Label htmlFor="status">Status</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, status: value as HomeworkStatus })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="assigned">Assigned</SelectItem>
-                      <SelectItem value="submitted">Submitted</SelectItem>
-                      <SelectItem value="reviewed">Reviewed</SelectItem>
-                      <SelectItem value="overdue">Overdue</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              <div className="grid gap-2">
+                <Label htmlFor="attached_materials">Attached Materials</Label>
+                <Popover open={materialsPopoverOpen} onOpenChange={setMaterialsPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between">
+                      {selectedMaterials.length > 0
+                        ? `${selectedMaterials.length} material${selectedMaterials.length > 1 ? 's' : ''} selected`
+                        : 'Select materials...'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search materials..." />
+                      <CommandList>
+                        <CommandEmpty>No materials found.</CommandEmpty>
+                        <CommandGroup>
+                          {materials?.map((material) => (
+                            <CommandItem
+                              key={material.id}
+                              value={material.id}
+                              onSelect={() =>
+                                setSelectedMaterials((prev) =>
+                                  prev.includes(material.id)
+                                    ? prev.filter((id) => id !== material.id)
+                                    : [...prev, material.id]
+                                )
+                              }
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4',
+                                  selectedMaterials.includes(material.id) ? 'opacity-100' : 'opacity-0'
+                                )}
+                              />
+                              {material.title}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {selectedMaterials.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {selectedMaterials.map((materialId) => {
+                      const material = materials?.find((m) => m.id === materialId)
+                      if (!material) return null
+                      return (
+                        <Badge key={materialId} variant="secondary" className="flex items-center gap-1">
+                          {material.title}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedMaterials((prev) => prev.filter((id) => id !== materialId))
+                            }
+                            className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
             </div>
           </DrawerSection>
         </div>

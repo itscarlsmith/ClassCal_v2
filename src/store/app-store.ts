@@ -11,6 +11,9 @@ export type DrawerType =
   | 'material'
   | 'message'
   | 'settings'
+  | 'student-booking'
+  | 'student-lesson'
+  | 'student-homework'
   | null
 
 export interface DrawerState {
@@ -23,6 +26,11 @@ interface AppState {
   // User & Profile
   user: Profile | null
   setUser: (user: Profile | null) => void
+
+  // Sidebar collapsed state (persisted)
+  sidebarCollapsed: boolean
+  setSidebarCollapsed: (collapsed: boolean) => void
+  toggleSidebarCollapsed: () => void
   
   // Drawer state
   drawer: DrawerState
@@ -55,6 +63,32 @@ export const useAppStore = create<AppState>((set) => ({
   // User & Profile
   user: null,
   setUser: (user) => set({ user }),
+
+  // Sidebar collapsed state
+  sidebarCollapsed: false,
+  setSidebarCollapsed: (collapsed) =>
+    set(() => {
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('classcal.sidebarCollapsed', collapsed ? '1' : '0')
+        }
+      } catch {
+        // ignore storage failures
+      }
+      return { sidebarCollapsed: collapsed }
+    }),
+  toggleSidebarCollapsed: () =>
+    set((state) => {
+      const next = !state.sidebarCollapsed
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('classcal.sidebarCollapsed', next ? '1' : '0')
+        }
+      } catch {
+        // ignore storage failures
+      }
+      return { sidebarCollapsed: next }
+    }),
   
   // Drawer state
   drawer: { type: null, id: null },
