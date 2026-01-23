@@ -25,10 +25,9 @@ export default async function DashboardRouterPage() {
     redirect('/teacher/dashboard')
   } else if (profile.role === 'student') {
     redirect('/student/dashboard')
-  } else if (profile.role === 'parent') {
-    redirect('/parent/dashboard')
   } else {
-    redirect('/')
+    await supabase.auth.signOut()
+    redirect('/login?error=unsupported_role')
   }
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Drawer, DrawerSection, DrawerFooter } from '../drawer'
 import { useAppStore } from '@/store/app-store'
@@ -23,6 +23,7 @@ import {
   Save,
 } from 'lucide-react'
 import type { Package as PackageType } from '@/types/database'
+import { formatCurrency } from '@/lib/currency'
 
 interface PaymentDrawerProps {
   id: string | null
@@ -35,7 +36,7 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
   const supabase = createClient()
   const isNew = !id || id === 'new'
 
-  const [formData, setFormData] = useState({
+  const initialFormDataRef = useRef({
     student_id: (data?.studentId as string) || '',
     package_id: '',
     amount: 0,
@@ -44,6 +45,9 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
     payment_method: 'card',
     transaction_id: '',
   })
+
+  const [formData, setFormData] = useState(initialFormDataRef.current)
+  const hydratedIdRef = useRef<string | null>(null)
 
   // Fetch payment data
   const { data: payment, isLoading } = useQuery({
@@ -59,19 +63,53 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
       return data
     },
     enabled: !isNew && !!id,
-    onSuccess: (loadedPayment) => {
-      if (!loadedPayment) return
-      setFormData({
-        student_id: loadedPayment.student_id,
-        package_id: loadedPayment.package_id || '',
-        amount: loadedPayment.amount,
-        credits_purchased: loadedPayment.credits_purchased,
-        status: loadedPayment.status,
-        payment_method: loadedPayment.payment_method || 'card',
-        transaction_id: loadedPayment.transaction_id || '',
-      })
-    },
   })
+
+  const { data: teacherSettings } = useQuery({
+    queryKey: ['teacher-settings', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null
+      const { data, error } = await supabase
+        .from('teacher_settings')
+        .select('currency_code')
+        .eq('teacher_id', user.id)
+        .maybeSingle()
+      if (error) throw error
+      return data
+    },
+    enabled: !!user?.id,
+  })
+
+  useEffect(() => {
+    if (isNew) {
+      const nextStudentId = (data?.studentId as string) || ''
+      if (
+        hydratedIdRef.current !== 'new' ||
+        formData.student_id !== nextStudentId
+      ) {
+        const nextInitial = {
+          ...initialFormDataRef.current,
+          student_id: nextStudentId,
+        }
+        setFormData(nextInitial)
+        hydratedIdRef.current = 'new'
+      }
+      return
+    }
+
+    if (!id || !payment || hydratedIdRef.current === id) return
+
+    setFormData({
+      student_id: payment.student_id,
+      package_id: payment.package_id || '',
+      amount: payment.amount,
+      credits_purchased: payment.credits_purchased,
+      status: payment.status,
+      payment_method: payment.payment_method || 'card',
+      transaction_id: payment.transaction_id || '',
+    })
+    hydratedIdRef.current = id
+  }, [data?.studentId, formData.student_id, id, isNew, payment])
 
   // Fetch students for dropdown
   const { data: students } = useQuery({
@@ -135,45 +173,17 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
           .single()
         if (paymentError) throw paymentError
 
-        // If payment is completed, add credits to student
+        // If payment is completed, add credits to student via ledger
         if (data.status === 'completed') {
-          // Update student credits
-          const { error: creditError } = await supabase.rpc('add_credits', {
-            p_student_id: data.student_id,
-            p_amount: data.credits_purchased,
-          })
-          
-          // If RPC doesn't exist, update directly
-          if (creditError) {
-            const { data: student } = await supabase
-              .from('students')
-              .select('credits')
-              .eq('id', data.student_id)
-              .single()
-            
-            if (student) {
-              await supabase
-                .from('students')
-                .update({ credits: student.credits + data.credits_purchased })
-                .eq('id', data.student_id)
-            }
-          }
-
-          // Record in ledger
-          const { data: studentData } = await supabase
-            .from('students')
-            .select('credits')
-            .eq('id', data.student_id)
-            .single()
-
-          await supabase.from('credit_ledger').insert({
+          const { error: ledgerError } = await supabase.from('credit_ledger').insert({
             student_id: data.student_id,
             teacher_id: user?.id,
             amount: data.credits_purchased,
-            balance_after: studentData?.credits || data.credits_purchased,
             description: `Purchased ${data.credits_purchased} credits`,
             payment_id: newPayment.id,
+            type: 'purchase',
           })
+          if (ledgerError) throw new Error(ledgerError.message)
         }
 
         return newPayment
@@ -195,8 +205,9 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
       toast.success(isNew ? 'Payment recorded' : 'Payment updated')
       if (isNew) closeDrawer()
     },
-    onError: () => {
-      toast.error('Failed to save payment')
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Failed to save payment'
+      toast.error(message)
     },
   })
 
@@ -223,6 +234,8 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
     }
     saveMutation.mutate(formData)
   }
+
+  const currencyCode = teacherSettings?.currency_code ?? 'USD'
 
   return (
     <Drawer
@@ -273,7 +286,9 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
           {!isNew && payment && (
             <div className="p-4 bg-muted/50 rounded-xl">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl font-bold">${payment.amount.toFixed(2)}</span>
+                <span className="text-2xl font-bold">
+                  {formatCurrency(payment.amount, currencyCode)}
+                </span>
                 <Badge
                   variant={payment.status === 'completed' ? 'default' : 'secondary'}
                   className={payment.status === 'completed' ? 'bg-green-100 text-green-800' : ''}
@@ -322,7 +337,7 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
                   <SelectContent>
                     {packages?.map((pkg) => (
                       <SelectItem key={pkg.id} value={pkg.id}>
-                        {pkg.name} - {pkg.credits} credits (${pkg.price})
+                      {pkg.name} - {pkg.credits} credits ({formatCurrency(pkg.price, currencyCode)})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -331,7 +346,7 @@ export function PaymentDrawer({ id, data }: PaymentDrawerProps) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="amount">Amount ($) *</Label>
+                  <Label htmlFor="amount">Amount *</Label>
                   <Input
                     id="amount"
                     type="number"

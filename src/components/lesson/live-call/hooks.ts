@@ -48,7 +48,7 @@ export function useControlsVisibility({
   }
 }
 
-export function useFullscreen(targetRef: RefObject<HTMLElement>) {
+export function useFullscreen(targetRef: RefObject<HTMLElement | null>) {
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false)
 
   const updateState = useCallback(() => {
@@ -61,7 +61,7 @@ export function useFullscreen(targetRef: RefObject<HTMLElement>) {
   }, [updateState])
 
   const enterFullscreen = useCallback(async () => {
-    const el = targetRef.current || document.documentElement
+    const el = targetRef.current ?? document.documentElement
     if (!el) return
     if (!document.fullscreenElement && el.requestFullscreen) {
       await el.requestFullscreen()

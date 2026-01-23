@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Drawer, DrawerSection, DrawerFooter } from '../drawer'
 import { useAppStore } from '@/store/app-store'
@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import { Trash2, Save, Package } from 'lucide-react'
 import type { Package as PackageType } from '@/types/database'
+import { formatCurrency } from '@/lib/currency'
 
 interface PackageDrawerProps {
   id: string | null
@@ -27,13 +28,16 @@ export function PackageDrawer({ id, data }: PackageDrawerProps) {
 
   void data
 
-  const [formData, setFormData] = useState({
+  const initialFormDataRef = useRef({
     name: '',
     description: '',
     credits: 1,
     price: 0,
     is_active: true,
   })
+
+  const [formData, setFormData] = useState(initialFormDataRef.current)
+  const hydratedIdRef = useRef<string | null>(null)
 
   // Fetch package data
   const { data: pkg, isLoading } = useQuery({
@@ -49,17 +53,43 @@ export function PackageDrawer({ id, data }: PackageDrawerProps) {
       return data as PackageType
     },
     enabled: !isNew && !!id,
-    onSuccess: (loadedPackage) => {
-      if (!loadedPackage) return
-      setFormData({
-        name: loadedPackage.name,
-        description: loadedPackage.description || '',
-        credits: loadedPackage.credits,
-        price: loadedPackage.price,
-        is_active: loadedPackage.is_active,
-      })
-    },
   })
+
+  const { data: teacherSettings } = useQuery({
+    queryKey: ['teacher-settings', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null
+      const { data, error } = await supabase
+        .from('teacher_settings')
+        .select('currency_code')
+        .eq('teacher_id', user.id)
+        .maybeSingle()
+      if (error) throw error
+      return data
+    },
+    enabled: !!user?.id,
+  })
+
+  useEffect(() => {
+    if (isNew) {
+      if (hydratedIdRef.current !== 'new') {
+        setFormData(initialFormDataRef.current)
+        hydratedIdRef.current = 'new'
+      }
+      return
+    }
+
+    if (!id || !pkg || hydratedIdRef.current === id) return
+
+    setFormData({
+      name: pkg.name,
+      description: pkg.description || '',
+      credits: pkg.credits,
+      price: pkg.price,
+      is_active: pkg.is_active,
+    })
+    hydratedIdRef.current = id
+  }, [id, isNew, pkg])
 
   // Save mutation
   const saveMutation = useMutation({
@@ -123,12 +153,17 @@ export function PackageDrawer({ id, data }: PackageDrawerProps) {
     saveMutation.mutate(formData)
   }
 
-  const pricePerCredit = formData.credits > 0 ? (formData.price / formData.credits).toFixed(2) : '0.00'
+  const currencyCode = teacherSettings?.currency_code ?? 'USD'
+  const pricePerCredit = formData.credits > 0 ? formData.price / formData.credits : 0
 
   return (
     <Drawer
       title={isNew ? 'Create Package' : pkg?.name || 'Package'}
-      subtitle={isNew ? 'Set up a new lesson package' : `${pkg?.credits} credits for $${pkg?.price}`}
+      subtitle={
+        isNew
+          ? 'Set up a new lesson package'
+          : `${pkg?.credits} credits for ${formatCurrency(pkg?.price ?? 0, currencyCode)}`
+      }
       width="md"
       footer={
         <DrawerFooter>
@@ -173,12 +208,14 @@ export function PackageDrawer({ id, data }: PackageDrawerProps) {
               <div>
                 <h3 className="font-semibold">{formData.name || 'Package Name'}</h3>
                 <p className="text-sm text-muted-foreground">
-                  ${pricePerCredit} per credit
+                  {formatCurrency(pricePerCredit, currencyCode)} per credit
                 </p>
               </div>
             </div>
             <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold">${formData.price.toFixed(2)}</span>
+              <span className="text-3xl font-bold">
+                {formatCurrency(formData.price, currencyCode)}
+              </span>
               <span className="text-muted-foreground">for {formData.credits} credits</span>
             </div>
           </div>
@@ -220,7 +257,7 @@ export function PackageDrawer({ id, data }: PackageDrawerProps) {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="price">Price ($) *</Label>
+                  <Label htmlFor="price">Price *</Label>
                   <Input
                     id="price"
                     type="number"

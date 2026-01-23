@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Drawer, DrawerSection, DrawerFooter } from '../drawer'
 import { useAppStore } from '@/store/app-store'
@@ -19,9 +19,10 @@ import {
   Calendar,
   Trash2,
   Save,
-  Users
 } from 'lucide-react'
-import type { Student, Parent } from '@/types/database'
+import type { Student } from '@/types/database'
+import { formatCurrency } from '@/lib/currency'
+import { getEffectiveHourlyRate } from '@/lib/pricing'
 
 interface StudentDrawerProps {
   id: string | null
@@ -36,14 +37,18 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
   
   void data
 
-  const [formData, setFormData] = useState({
+  const initialFormDataRef = useRef({
     full_name: '',
     email: '',
     phone: '',
     notes: '',
-    hourly_rate: 45,
+    hourly_rate: null as number | null,
     credits: 0,
   })
+
+  const [formData, setFormData] = useState(initialFormDataRef.current)
+  const [useDefaultRate, setUseDefaultRate] = useState(true)
+  const hydratedIdRef = useRef<string | null>(null)
 
   // Fetch student data
   const { data: student, isLoading } = useQuery({
@@ -52,25 +57,53 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
       if (isNew) return null
       const { data, error } = await supabase
         .from('students')
-        .select('*, parents(*)')
+        .select('*')
         .eq('id', id)
         .single()
       if (error) throw error
-      return data as Student & { parents: Parent[] }
+      return data as Student
     },
     enabled: !isNew && !!id,
-    onSuccess: (loadedStudent) => {
-      if (!loadedStudent) return
-      setFormData({
-        full_name: loadedStudent.full_name,
-        email: loadedStudent.email,
-        phone: loadedStudent.phone || '',
-        notes: loadedStudent.notes || '',
-        hourly_rate: loadedStudent.hourly_rate,
-        credits: loadedStudent.credits,
-      })
-    },
   })
+
+  const { data: teacherSettings } = useQuery({
+    queryKey: ['teacher-settings', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null
+      const { data, error } = await supabase
+        .from('teacher_settings')
+        .select('default_hourly_rate, currency_code')
+        .eq('teacher_id', user.id)
+        .maybeSingle()
+      if (error) throw error
+      return data
+    },
+    enabled: !!user?.id,
+  })
+
+  useEffect(() => {
+    if (isNew) {
+      if (hydratedIdRef.current !== 'new') {
+        setFormData(initialFormDataRef.current)
+        setUseDefaultRate(true)
+        hydratedIdRef.current = 'new'
+      }
+      return
+    }
+
+    if (!id || !student || hydratedIdRef.current === id) return
+
+    setFormData({
+      full_name: student.full_name,
+      email: student.email,
+      phone: student.phone || '',
+      notes: student.notes || '',
+      hourly_rate: student.hourly_rate,
+      credits: student.credits,
+    })
+    setUseDefaultRate(student.hourly_rate == null)
+    hydratedIdRef.current = id
+  }, [id, isNew, student])
 
   // Fetch student's recent lessons
   const { data: recentLessons } = useQuery({
@@ -92,6 +125,10 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      const desiredCredits = data.credits ?? 0
+      const currentCredits = student?.credits ?? 0
+      const creditDelta = desiredCredits - currentCredits
+
       // Try to find an existing student profile for this email so we can link accounts
       const { data: existingProfile } = await supabase
         .from('profiles')
@@ -100,8 +137,9 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
         .eq('role', 'student')
         .maybeSingle()
 
+      const { credits: _credits, ...rest } = data
       const payload = {
-        ...data,
+        ...rest,
         teacher_id: user?.id,
         // Link to an existing student account if present so the student can see their data
         user_id: existingProfile?.id ?? null,
@@ -114,6 +152,16 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
           .select()
           .single()
         if (error) throw error
+        if (desiredCredits > 0) {
+          const { error: ledgerError } = await supabase.from('credit_ledger').insert({
+            student_id: newStudent.id,
+            teacher_id: user?.id,
+            amount: desiredCredits,
+            description: `Manual credit add: ${desiredCredits}`,
+            type: 'manual_add',
+          })
+          if (ledgerError) throw new Error(ledgerError.message)
+        }
         return newStudent
       } else {
         const { data: updated, error } = await supabase
@@ -123,6 +171,19 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
           .select()
           .single()
         if (error) throw error
+        if (creditDelta !== 0) {
+          const { error: ledgerError } = await supabase.from('credit_ledger').insert({
+            student_id: id,
+            teacher_id: user?.id,
+            amount: creditDelta,
+            description:
+              creditDelta > 0
+                ? `Manual credit add: ${creditDelta}`
+                : `Manual credit deduct: ${Math.abs(creditDelta)}`,
+            type: creditDelta > 0 ? 'manual_add' : 'manual_deduct',
+          })
+          if (ledgerError) throw new Error(ledgerError.message)
+        }
         return updated
       }
     },
@@ -132,8 +193,9 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
       toast.success(isNew ? 'Student created' : 'Student updated')
       if (isNew) closeDrawer()
     },
-    onError: () => {
-      toast.error('Failed to save student')
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Failed to save student'
+      toast.error(message)
     },
   })
 
@@ -172,6 +234,14 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
       .toUpperCase()
       .slice(0, 2)
   }
+
+  const defaultHourlyRate = teacherSettings?.default_hourly_rate ?? 45
+  const currencyCode = teacherSettings?.currency_code ?? 'USD'
+  const currentStudentRate = isNew ? formData.hourly_rate : student?.hourly_rate ?? null
+  const effectiveRate = getEffectiveHourlyRate({
+    studentHourlyRate: currentStudentRate,
+    teacherDefaultHourlyRate: defaultHourlyRate,
+  })
 
   return (
     <Drawer
@@ -239,8 +309,13 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
                       {student.credits} credits
                     </Badge>
                     <Badge variant="outline">
-                      ${student.hourly_rate}/hr
+                      {formatCurrency(effectiveRate, currencyCode)}
                     </Badge>
+                    {student.hourly_rate == null && (
+                      <Badge variant="secondary" className="text-xs">
+                        Default rate
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     Student since {new Date(student.created_at).toLocaleDateString()}
@@ -289,14 +364,42 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
             <DrawerSection title="Billing">
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="hourly_rate">Hourly Rate ($)</Label>
+                  <Label htmlFor="use_default_rate">Use Teacher Default</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      id="use_default_rate"
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={useDefaultRate}
+                      onChange={(e) => {
+                        const checked = e.target.checked
+                        setUseDefaultRate(checked)
+                        setFormData({
+                          ...formData,
+                          hourly_rate: checked ? null : defaultHourlyRate,
+                        })
+                      }}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      Default is {formatCurrency(defaultHourlyRate, currencyCode)}
+                    </span>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="hourly_rate">Hourly Rate Override</Label>
                   <Input
                     id="hourly_rate"
                     type="number"
                     min="0"
                     step="0.01"
-                    value={formData.hourly_rate}
-                    onChange={(e) => setFormData({ ...formData, hourly_rate: parseFloat(e.target.value) || 0 })}
+                    value={useDefaultRate ? '' : formData.hourly_rate ?? ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        hourly_rate: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    disabled={useDefaultRate}
                   />
                 </div>
                 <div className="grid gap-2">
@@ -323,31 +426,6 @@ export function StudentDrawer({ id, data }: StudentDrawerProps) {
               />
             </DrawerSection>
 
-            {/* Parents Section */}
-            {!isNew && student?.parents && student.parents.length > 0 && (
-              <>
-                <Separator />
-                <DrawerSection title="Parents / Guardians">
-                  <div className="space-y-2">
-                    {student.parents.map((parent) => (
-                      <div 
-                        key={parent.id} 
-                        className="flex items-center gap-3 p-3 rounded-lg bg-muted/50"
-                      >
-                        <Users className="w-4 h-4 text-muted-foreground" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">{parent.full_name}</p>
-                          <p className="text-xs text-muted-foreground">{parent.email}</p>
-                        </div>
-                        {parent.is_primary && (
-                          <Badge variant="secondary" className="text-xs">Primary</Badge>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </DrawerSection>
-              </>
-            )}
           </TabsContent>
 
           {!isNew && (

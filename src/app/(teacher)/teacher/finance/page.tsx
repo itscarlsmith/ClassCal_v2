@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import type { Package as PackageType } from '@/types/database'
+import { formatCurrency } from '@/lib/currency'
 
 export default function FinancePage() {
   const { openDrawer } = useAppStore()
@@ -59,6 +60,20 @@ export default function FinancePage() {
     },
   })
 
+  const { data: teacherSettings } = useQuery({
+    queryKey: ['teacher-settings'],
+    queryFn: async () => {
+      const { data: userData } = await supabase.auth.getUser()
+      const { data, error } = await supabase
+        .from('teacher_settings')
+        .select('currency_code')
+        .eq('teacher_id', userData.user?.id)
+        .maybeSingle()
+      if (error) throw error
+      return data
+    },
+  })
+
   // Calculate stats
   const totalEarnings = payments
     ?.filter((p) => p.status === 'completed')
@@ -77,6 +92,7 @@ export default function FinancePage() {
     .reduce((sum, p) => sum + Number(p.amount), 0) || 0
 
   const pendingPayments = payments?.filter((p) => p.status === 'pending').length || 0
+  const currencyCode = teacherSettings?.currency_code ?? 'USD'
 
   return (
     <div className="p-8 space-y-6">
@@ -107,7 +123,7 @@ export default function FinancePage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Earnings</p>
-                <p className="stat-value mt-2">${totalEarnings.toLocaleString()}</p>
+                <p className="stat-value mt-2">{formatCurrency(totalEarnings, currencyCode)}</p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
                 <DollarSign className="w-6 h-6 text-green-600" />
@@ -121,7 +137,9 @@ export default function FinancePage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">This Month</p>
-                <p className="stat-value mt-2">${thisMonthEarnings.toLocaleString()}</p>
+                <p className="stat-value mt-2">
+                  {formatCurrency(thisMonthEarnings, currencyCode)}
+                </p>
                 <span className="stat-trend-positive mt-2">
                   <TrendingUp className="w-3 h-3" />
                   +15% vs last month
@@ -207,7 +225,7 @@ export default function FinancePage() {
                         </TableCell>
                         <TableCell>{payment.package?.name || 'Custom'}</TableCell>
                         <TableCell className="font-semibold">
-                          ${Number(payment.amount).toFixed(2)}
+                          {formatCurrency(Number(payment.amount), currencyCode)}
                         </TableCell>
                         <TableCell>{payment.credits_purchased}</TableCell>
                         <TableCell>
@@ -286,14 +304,14 @@ export default function FinancePage() {
                     )}
                     <div className="mt-4 flex items-baseline gap-1">
                       <span className="text-3xl font-bold">
-                        ${Number(pkg.price).toFixed(0)}
+                        {formatCurrency(Number(pkg.price), currencyCode)}
                       </span>
                       <span className="text-muted-foreground">
                         for {pkg.credits} credits
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground mt-2">
-                      ${(Number(pkg.price) / pkg.credits).toFixed(2)} per credit
+                      {formatCurrency(Number(pkg.price) / pkg.credits, currencyCode)} per credit
                     </p>
                   </CardContent>
                 </Card>

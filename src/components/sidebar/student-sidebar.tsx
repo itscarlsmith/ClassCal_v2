@@ -8,6 +8,7 @@ import {
   GraduationCap,
   BookOpenCheck,
   MessageSquare,
+  DollarSign,
   Settings,
   LifeBuoy,
   LogOut,
@@ -28,6 +29,7 @@ const navItems = [
   { label: 'Lessons', href: '/student/lessons', icon: GraduationCap },
   { label: 'Homework', href: '/student/homework', icon: BookOpenCheck },
   { label: 'Messages', href: '/student/messages', icon: MessageSquare },
+  { label: 'Finance', href: '/student/finance', icon: DollarSign },
   { label: 'Settings', href: '/student/settings', icon: Settings },
   { label: 'Help', href: '/student/help', icon: LifeBuoy },
 ]

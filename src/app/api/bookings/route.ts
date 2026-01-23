@@ -225,6 +225,13 @@ export async function POST(request: Request) {
       .single()
 
     if (insertError) {
+      const message = insertError.message || ''
+      if (message.includes('credit_balance_negative')) {
+        return NextResponse.json(
+          { error: 'You do not have enough credits to book a lesson.' },
+          { status: 400 }
+        )
+      }
       console.error('Error inserting lesson from booking', insertError)
       return NextResponse.json(
         { error: 'Failed to create lesson. Please try again.' },

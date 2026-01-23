@@ -19,6 +19,8 @@ import {
 import { Plus, Search, Users, CreditCard, Mail, Phone } from 'lucide-react'
 import { useState } from 'react'
 import type { Student } from '@/types/database'
+import { formatCurrency } from '@/lib/currency'
+import { getEffectiveHourlyRate } from '@/lib/pricing'
 
 export default function StudentsPage() {
   const { openDrawer } = useAppStore()
@@ -40,6 +42,20 @@ export default function StudentsPage() {
     },
   })
 
+  const { data: teacherSettings } = useQuery({
+    queryKey: ['teacher-settings'],
+    queryFn: async () => {
+      const { data: userData } = await supabase.auth.getUser()
+      const { data, error } = await supabase
+        .from('teacher_settings')
+        .select('default_hourly_rate, currency_code')
+        .eq('teacher_id', userData.user?.id)
+        .maybeSingle()
+      if (error) throw error
+      return data
+    },
+  })
+
   const filteredStudents = students?.filter(
     (student) =>
       student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -58,9 +74,18 @@ export default function StudentsPage() {
   // Stats
   const totalStudents = students?.length || 0
   const totalCredits = students?.reduce((sum, s) => sum + s.credits, 0) || 0
-  const avgRate = students?.length 
-    ? (students.reduce((sum, s) => sum + s.hourly_rate, 0) / students.length).toFixed(2) 
-    : '0.00'
+  const defaultHourlyRate = teacherSettings?.default_hourly_rate ?? 45
+  const currencyCode = teacherSettings?.currency_code ?? 'USD'
+  const avgRate =
+    students?.length
+      ? students.reduce((sum, s) => {
+          const effectiveRate = getEffectiveHourlyRate({
+            studentHourlyRate: s.hourly_rate,
+            teacherDefaultHourlyRate: defaultHourlyRate,
+          })
+          return sum + effectiveRate
+        }, 0) / students.length
+      : 0
 
   return (
     <div className="p-8 space-y-6">
@@ -109,7 +134,7 @@ export default function StudentsPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Avg. Hourly Rate</p>
-              <p className="text-2xl font-bold">${avgRate}</p>
+              <p className="text-2xl font-bold">{formatCurrency(avgRate, currencyCode)}</p>
             </div>
           </CardContent>
         </Card>
@@ -191,7 +216,20 @@ export default function StudentsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      ${student.hourly_rate}/hr
+                      <div className="flex flex-col items-end">
+                        <span>
+                          {formatCurrency(
+                            getEffectiveHourlyRate({
+                              studentHourlyRate: student.hourly_rate,
+                              teacherDefaultHourlyRate: defaultHourlyRate,
+                            }),
+                            currencyCode
+                          )}
+                        </span>
+                        {student.hourly_rate == null && (
+                          <span className="text-xs text-muted-foreground">Default</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Button 

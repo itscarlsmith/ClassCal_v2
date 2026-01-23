@@ -21,22 +21,17 @@ INSERT INTO profiles (id, email, full_name, role, timezone, avatar_url) VALUES
 ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name;
 
 -- Teacher settings
-INSERT INTO teacher_settings (teacher_id, cancellation_policy_hours, default_lesson_duration, booking_buffer_hours, max_advance_booking_days) VALUES
-  ('35ff8d14-a647-401c-992c-a4e01ae34f14', 24, 60, 2, 30)
+INSERT INTO teacher_settings (teacher_id, cancellation_policy_hours, default_lesson_duration, booking_buffer_hours, max_advance_booking_days, default_hourly_rate) VALUES
+  ('35ff8d14-a647-401c-992c-a4e01ae34f14', 24, 60, 2, 30, 45.00)
 ON CONFLICT (teacher_id) DO NOTHING;
 
 -- Students for the teacher (including the demo student account)
 INSERT INTO students (id, teacher_id, user_id, full_name, email, phone, credits, hourly_rate, notes) VALUES
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '35ff8d14-a647-401c-992c-a4e01ae34f14', 'e08da009-b509-4fbf-9207-58651d9569fb', 'Alex Johnson', 'student@classcal.demo', '+1 555-0101', 8, 45.00, 'Intermediate level. Working on conversation skills.'),
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '35ff8d14-a647-401c-992c-a4e01ae34f14', NULL, 'Emma Williams', 'emma.williams@example.com', '+1 555-0102', 5, 45.00, 'Beginner. Focus on grammar fundamentals.'),
-  ('cccccccc-cccc-cccc-cccc-cccccccccccc', '35ff8d14-a647-401c-992c-a4e01ae34f14', NULL, 'Michael Chen', 'michael.chen@example.com', '+1 555-0103', 12, 50.00, 'Advanced. Preparing for business presentations.'),
-  ('dddddddd-dddd-dddd-dddd-dddddddddddd', '35ff8d14-a647-401c-992c-a4e01ae34f14', NULL, 'Sofia Rodriguez', 'sofia.rodriguez@example.com', '+1 555-0104', 3, 45.00, 'Intermediate. Working on pronunciation.'),
-  ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '35ff8d14-a647-401c-992c-a4e01ae34f14', NULL, 'James Wilson', 'james.wilson@example.com', '+1 555-0105', 0, 45.00, 'Beginner. Needs to purchase more credits.')
-ON CONFLICT (id) DO NOTHING;
-
--- Parents for child student
-INSERT INTO parents (id, student_id, full_name, email, phone, is_primary) VALUES
-  ('pppppppp-pppp-pppp-pppp-pppppppppppp', 'dddddddd-dddd-dddd-dddd-dddddddddddd', 'Maria Rodriguez', 'maria.rodriguez@example.com', '+1 555-0204', true)
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '35ff8d14-a647-401c-992c-a4e01ae34f14', 'e08da009-b509-4fbf-9207-58651d9569fb', 'Alex Johnson', 'student@classcal.demo', '+1 555-0101', 0, NULL, 'Intermediate level. Working on conversation skills.'),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '35ff8d14-a647-401c-992c-a4e01ae34f14', NULL, 'Emma Williams', 'emma.williams@example.com', '+1 555-0102', 0, NULL, 'Beginner. Focus on grammar fundamentals.'),
+  ('cccccccc-cccc-cccc-cccc-cccccccccccc', '35ff8d14-a647-401c-992c-a4e01ae34f14', NULL, 'Michael Chen', 'michael.chen@example.com', '+1 555-0103', 0, 50.00, 'Advanced. Preparing for business presentations.'),
+  ('dddddddd-dddd-dddd-dddd-dddddddddddd', '35ff8d14-a647-401c-992c-a4e01ae34f14', NULL, 'Sofia Rodriguez', 'sofia.rodriguez@example.com', '+1 555-0104', 0, NULL, 'Intermediate. Working on pronunciation.'),
+  ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '35ff8d14-a647-401c-992c-a4e01ae34f14', NULL, 'James Wilson', 'james.wilson@example.com', '+1 555-0105', 0, NULL, 'Beginner. Needs to purchase more credits.')
 ON CONFLICT (id) DO NOTHING;
 
 -- Teacher availability (recurring weekly)
@@ -175,12 +170,13 @@ INSERT INTO payments (id, teacher_id, student_id, package_id, amount, credits_pu
 ON CONFLICT (id) DO NOTHING;
 
 -- Credit ledger entries (for transaction history)
-INSERT INTO credit_ledger (student_id, teacher_id, amount, balance_after, description, payment_id, created_at) VALUES
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '35ff8d14-a647-401c-992c-a4e01ae34f14', 10, 10, 'Purchased 10 Lesson Pack', 'paypaypa-0001-payp-aypa-ypaypaypaypa', NOW() - INTERVAL '30 days'),
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '35ff8d14-a647-401c-992c-a4e01ae34f14', -1, 9, 'Lesson completed: Conversation Practice', NULL, NOW() - INTERVAL '7 days'),
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '35ff8d14-a647-401c-992c-a4e01ae34f14', -1, 8, 'Lesson completed: Previous lesson', NULL, NOW() - INTERVAL '14 days'),
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '35ff8d14-a647-401c-992c-a4e01ae34f14', 5, 5, 'Purchased 5 Lesson Pack', 'paypaypa-0002-payp-aypa-ypaypaypaypa', NOW() - INTERVAL '14 days'),
-  ('cccccccc-cccc-cccc-cccc-cccccccccccc', '35ff8d14-a647-401c-992c-a4e01ae34f14', 20, 20, 'Purchased Monthly Intensive', 'paypaypa-0003-payp-aypa-ypaypaypaypa', NOW() - INTERVAL '45 days');
+INSERT INTO credit_ledger (student_id, teacher_id, amount, balance_after, description, payment_id, type, created_at) VALUES
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '35ff8d14-a647-401c-992c-a4e01ae34f14', 10, 10, 'Purchased 10 Lesson Pack', 'paypaypa-0001-payp-aypa-ypaypaypaypa', 'purchase', NOW() - INTERVAL '30 days'),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '35ff8d14-a647-401c-992c-a4e01ae34f14', -1, 9, 'Legacy lesson credit', NULL, 'manual_deduct', NOW() - INTERVAL '14 days'),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '35ff8d14-a647-401c-992c-a4e01ae34f14', -1, 8, 'Legacy lesson credit', NULL, 'manual_deduct', NOW() - INTERVAL '7 days'),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '35ff8d14-a647-401c-992c-a4e01ae34f14', 5, 5, 'Purchased 5 Lesson Pack', 'paypaypa-0002-payp-aypa-ypaypaypaypa', 'purchase', NOW() - INTERVAL '14 days'),
+  ('cccccccc-cccc-cccc-cccc-cccccccccccc', '35ff8d14-a647-401c-992c-a4e01ae34f14', 20, 20, 'Purchased Monthly Intensive', 'paypaypa-0003-payp-aypa-ypaypaypaypa', 'purchase', NOW() - INTERVAL '45 days'),
+  ('dddddddd-dddd-dddd-dddd-dddddddddddd', '35ff8d14-a647-401c-992c-a4e01ae34f14', 3, 3, 'Opening balance (seed)', NULL, 'opening_balance', NOW() - INTERVAL '10 days');
 
 -- Message threads
 INSERT INTO message_threads (id, participant_ids, last_message_at) VALUES

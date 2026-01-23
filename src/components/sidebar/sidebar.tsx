@@ -204,7 +204,6 @@ export function Sidebar() {
             <NavSubItem label="Homework" href={teacherHref('/students/homework')} />
             <NavSubItem label="Files" href={teacherHref('/students/files')} />
             <NavSubItem label="Payments" href={teacherHref('/students/payments')} />
-            <NavSubItem label="Parents" href={teacherHref('/students/parents')} />
           </NavItem>
           
           {/* Homework */}
@@ -238,7 +237,6 @@ export function Sidebar() {
               badge={unreadMessagesCount}
             />
             <NavSubItem label="Students" href={teacherHref('/messages/students')} />
-            <NavSubItem label="Parents" href={teacherHref('/messages/parents')} />
             <NavSubItem label="Groups" href={teacherHref('/messages/groups')} />
           </NavItem>
           

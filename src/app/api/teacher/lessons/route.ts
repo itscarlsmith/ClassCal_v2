@@ -141,6 +141,13 @@ export async function POST(request: Request) {
       .single()
 
     if (insertError) {
+      const message = insertError.message || ''
+      if (message.includes('credit_balance_negative')) {
+        return NextResponse.json(
+          { error: 'Not enough credits to reserve this lesson.' },
+          { status: 400 }
+        )
+      }
       console.error('Error creating lesson', insertError)
       return NextResponse.json({ error: 'Failed to create lesson.' }, { status: 500 })
     }

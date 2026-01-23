@@ -81,9 +81,8 @@ export function NavItem({ label, icon, href, sectionKey, badge, children }: NavI
             <div className="px-2 py-1.5 text-sm font-semibold">{label}</div>
             <div className="space-y-1">
               {React.Children.map(children, (child) => {
-                if (!React.isValidElement(child)) return child
-                // `children` are expected to be `NavSubItem` elements; cast to allow adding the variant prop.
-                return React.cloneElement(child, { variant: 'popover' })
+                if (!React.isValidElement<NavSubItemProps>(child)) return child
+                return React.cloneElement<NavSubItemProps>(child, { variant: 'popover' })
               })}
             </div>
           </PopoverContent>

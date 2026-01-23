@@ -14,7 +14,7 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  let role: 'teacher' | 'student' | 'parent' | null = null
+  let role: 'teacher' | 'student' | null = null
 
   if (user) {
     const { data: profile } = await supabase

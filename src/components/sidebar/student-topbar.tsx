@@ -9,6 +9,7 @@ const topbarClassName =
 
 function getStudentPageTitle(pathname: string) {
   if (pathname.startsWith('/student/calendar')) return 'Calendar'
+  if (pathname.startsWith('/student/finance')) return 'Finance'
   if (pathname.startsWith('/student/lessons')) return 'Lessons'
   if (pathname.startsWith('/student/homework')) return 'Homework'
   if (pathname.startsWith('/student/messages')) return 'Messages'

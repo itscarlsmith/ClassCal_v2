@@ -60,10 +60,11 @@ export default function LoginPage() {
         router.push('/teacher/dashboard')
       } else if (profile.role === 'student') {
         router.push('/student/dashboard')
-      } else if (profile.role === 'parent') {
-        router.push('/parent/dashboard')
       } else {
-        router.push('/')
+        await supabase.auth.signOut()
+        toast.error('Your account role is not supported yet.')
+        router.push('/login?error=unsupported_role')
+        return
       }
 
       router.refresh()
@@ -122,10 +123,11 @@ export default function LoginPage() {
         router.push('/teacher/dashboard')
       } else if (profile.role === 'student') {
         router.push('/student/dashboard')
-      } else if (profile.role === 'parent') {
-        router.push('/parent/dashboard')
       } else {
-        router.push('/')
+        await supabase.auth.signOut()
+        toast.error('Your account role is not supported yet.')
+        router.push('/login?error=unsupported_role')
+        return
       }
 
       router.refresh()

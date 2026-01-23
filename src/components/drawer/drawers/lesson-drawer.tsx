@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Drawer, DrawerSection, DrawerFooter } from '../drawer'
 import { useAppStore } from '@/store/app-store'
@@ -63,7 +63,7 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
     return `${year}-${month}-${day}T${hours}:${minutes}`
   }
 
-  const [formData, setFormData] = useState({
+  const initialFormDataRef = useRef({
     student_id: (data?.studentId as string) || '',
     title: '',
     description: '',
@@ -72,10 +72,14 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
     status: 'pending' as LessonStatus,
     credits_used: 1,
   })
+
+  const [formData, setFormData] = useState(initialFormDataRef.current)
   const [preAgreed, setPreAgreed] = useState(false)
   const [isRecurring, setIsRecurring] = useState(false)
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([])
   const [materialsPopoverOpen, setMaterialsPopoverOpen] = useState(false)
+  const hydratedIdRef = useRef<string | null>(null)
+  const hydratedMaterialsRef = useRef<string | null>(null)
 
   // Fetch lesson data
   const { data: lesson, isLoading } = useQuery({
@@ -91,20 +95,53 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
       return data as Lesson & { student: Pick<Student, 'id' | 'full_name' | 'email' | 'avatar_url'> }
     },
     enabled: !isNew && !!id,
-    onSuccess: (loadedLesson) => {
-      if (!loadedLesson) return
-      setFormData({
-        student_id: loadedLesson.student_id,
-        title: loadedLesson.title,
-        description: loadedLesson.description || '',
-        start_time: toLocalDateTimeString(new Date(loadedLesson.start_time)),
-        end_time: toLocalDateTimeString(new Date(loadedLesson.end_time)),
-        status: loadedLesson.status,
-        credits_used: loadedLesson.credits_used,
-      })
-      setIsRecurring(loadedLesson.is_recurring || false)
-    },
   })
+
+  useEffect(() => {
+    if (isNew) {
+      const nextInitial = {
+        student_id: (data?.studentId as string) || '',
+        title: '',
+        description: '',
+        start_time: data?.startTime
+          ? toLocalDateTimeString(new Date(data.startTime as string))
+          : '',
+        end_time: data?.endTime
+          ? toLocalDateTimeString(new Date(data.endTime as string))
+          : '',
+        status: 'pending' as LessonStatus,
+        credits_used: 1,
+      }
+      if (
+        hydratedIdRef.current !== 'new' ||
+        formData.student_id !== nextInitial.student_id ||
+        formData.start_time !== nextInitial.start_time ||
+        formData.end_time !== nextInitial.end_time
+      ) {
+        setFormData(nextInitial)
+        setIsRecurring(false)
+        setPreAgreed(false)
+        setSelectedMaterials([])
+        hydratedIdRef.current = 'new'
+        hydratedMaterialsRef.current = 'new'
+      }
+      return
+    }
+
+    if (!id || !lesson || hydratedIdRef.current === id) return
+
+    setFormData({
+      student_id: lesson.student_id,
+      title: lesson.title,
+      description: lesson.description || '',
+      start_time: toLocalDateTimeString(new Date(lesson.start_time)),
+      end_time: toLocalDateTimeString(new Date(lesson.end_time)),
+      status: lesson.status,
+      credits_used: lesson.credits_used,
+    })
+    setIsRecurring(lesson.is_recurring || false)
+    hydratedIdRef.current = id
+  }, [data?.endTime, data?.startTime, data?.studentId, id, isNew, lesson])
 
   // Fetch students for dropdown
   const { data: students } = useQuery({
@@ -158,7 +195,7 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
   })
 
   // Fetch lesson materials (for existing lessons)
-  useQuery({
+  const { data: lessonMaterials } = useQuery({
     queryKey: ['lesson-materials', id],
     queryFn: async () => {
       if (isNew) return []
@@ -170,12 +207,14 @@ export function LessonDrawer({ id, data }: LessonDrawerProps) {
       return data.map((lm) => lm.material_id)
     },
     enabled: !isNew && !!id,
-    onSuccess: (materials) => {
-      if (materials) {
-        setSelectedMaterials(materials)
-      }
-    },
   })
+
+  useEffect(() => {
+    if (isNew) return
+    if (!id || !lessonMaterials || hydratedMaterialsRef.current === id) return
+    setSelectedMaterials(lessonMaterials)
+    hydratedMaterialsRef.current = id
+  }, [id, isNew, lessonMaterials])
 
   // Save mutation
   const saveMutation = useMutation({
