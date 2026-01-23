@@ -62,7 +62,7 @@ interface Database {
           avatar_url: string | null
           notes: string | null
           credits: number
-          hourly_rate: number
+          hourly_rate: number | null
           created_at: string
           updated_at: string
         }
@@ -76,7 +76,7 @@ interface Database {
           avatar_url?: string | null
           notes?: string | null
           credits?: number
-          hourly_rate?: number
+          hourly_rate?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -89,7 +89,7 @@ interface Database {
           avatar_url?: string | null
           notes?: string | null
           credits?: number
-          hourly_rate?: number
+          hourly_rate?: number | null
           updated_at?: string
         }
       }
@@ -568,6 +568,8 @@ interface Database {
           description: string
           lesson_id: string | null
           payment_id: string | null
+          stripe_payment_intent_id: string | null
+          type: string
           created_at: string
         }
         Insert: {
@@ -575,10 +577,12 @@ interface Database {
           student_id: string
           teacher_id: string
           amount: number
-          balance_after: number
+          balance_after?: number
           description: string
           lesson_id?: string | null
           payment_id?: string | null
+          stripe_payment_intent_id?: string | null
+          type: string
           created_at?: string
         }
         Update: {
@@ -589,6 +593,8 @@ interface Database {
           description?: string
           lesson_id?: string | null
           payment_id?: string | null
+          stripe_payment_intent_id?: string | null
+          type?: string
         }
       }
       automation_rules: {
@@ -659,6 +665,13 @@ interface Database {
           default_lesson_duration: number
           booking_buffer_hours: number
           max_advance_booking_days: number
+          default_hourly_rate: number
+          currency_code: string
+          country: string | null
+          stripe_account_id: string | null
+          stripe_charges_enabled: boolean
+          stripe_payouts_enabled: boolean
+          stripe_onboarding_completed: boolean
           created_at: string
           updated_at: string
         }
@@ -669,6 +682,13 @@ interface Database {
           default_lesson_duration?: number
           booking_buffer_hours?: number
           max_advance_booking_days?: number
+          default_hourly_rate?: number
+          currency_code?: string
+          country?: string | null
+          stripe_account_id?: string | null
+          stripe_charges_enabled?: boolean
+          stripe_payouts_enabled?: boolean
+          stripe_onboarding_completed?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -678,6 +698,13 @@ interface Database {
           default_lesson_duration?: number
           booking_buffer_hours?: number
           max_advance_booking_days?: number
+          default_hourly_rate?: number
+          currency_code?: string
+          country?: string | null
+          stripe_account_id?: string | null
+          stripe_charges_enabled?: boolean
+          stripe_payouts_enabled?: boolean
+          stripe_onboarding_completed?: boolean
           updated_at?: string
         }
       }

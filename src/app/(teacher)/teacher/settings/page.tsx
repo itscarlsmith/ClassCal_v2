@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -21,6 +22,7 @@ import { toast } from 'sonner'
 import { Save, User, Calendar, Receipt, LogOut } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { Profile, TeacherSettings } from '@/types/database'
+import { normalizeCurrencyCode } from '@/lib/currency'
 
 export default function SettingsPage() {
   const supabase = createClient()
@@ -40,18 +42,10 @@ export default function SettingsPage() {
       if (error) throw error
       return data as Profile
     },
-    onSuccess: (loadedProfile) => {
-      if (!loadedProfile) return
-      setProfileForm({
-        full_name: loadedProfile.full_name,
-        email: loadedProfile.email,
-        timezone: loadedProfile.timezone,
-      })
-    },
   })
 
   // Fetch teacher settings
-  useQuery({
+  const { data: teacherSettings } = useQuery({
     queryKey: ['teacher-settings'],
     queryFn: async () => {
       const { data: userData } = await supabase.auth.getUser()
@@ -63,29 +57,65 @@ export default function SettingsPage() {
       if (error && error.code !== 'PGRST116') throw error
       return data as TeacherSettings | null
     },
-    onSuccess: (loadedSettings) => {
-      if (!loadedSettings) return
-      setSettingsForm({
-        cancellation_policy_hours: loadedSettings.cancellation_policy_hours,
-        default_lesson_duration: loadedSettings.default_lesson_duration,
-        booking_buffer_hours: loadedSettings.booking_buffer_hours,
-        max_advance_booking_days: loadedSettings.max_advance_booking_days,
-      })
-    },
   })
 
-  const [profileForm, setProfileForm] = useState({
+  const profileFormRef = useRef({
     full_name: '',
     email: '',
     timezone: 'America/New_York',
   })
+  const [profileForm, setProfileForm] = useState(profileFormRef.current)
+  const profileHydratedRef = useRef<string | null>(null)
 
-  const [settingsForm, setSettingsForm] = useState({
+  const settingsFormRef = useRef({
     cancellation_policy_hours: 24,
     default_lesson_duration: 60,
     booking_buffer_hours: 2,
     max_advance_booking_days: 30,
+    default_hourly_rate: 45,
+    currency_code: 'USD',
+    country: '',
   })
+  const [settingsForm, setSettingsForm] = useState(settingsFormRef.current)
+  const settingsHydratedRef = useRef<string | null>(null)
+  const [currencySelectorValue, setCurrencySelectorValue] = useState('USD')
+
+  useEffect(() => {
+    if (!profile) return
+    if (profileHydratedRef.current === profile.id) return
+    setProfileForm({
+      full_name: profile.full_name,
+      email: profile.email,
+      timezone: profile.timezone,
+    })
+    profileHydratedRef.current = profile.id
+  }, [profile])
+
+  useEffect(() => {
+    if (!profile) return
+    if (settingsHydratedRef.current === profile.id) return
+    if (teacherSettings === undefined) return
+    if (teacherSettings === null) {
+      settingsHydratedRef.current = profile.id
+      return
+    }
+    setSettingsForm({
+      cancellation_policy_hours: teacherSettings.cancellation_policy_hours,
+      default_lesson_duration: teacherSettings.default_lesson_duration,
+      booking_buffer_hours: teacherSettings.booking_buffer_hours,
+      max_advance_booking_days: teacherSettings.max_advance_booking_days,
+      default_hourly_rate: teacherSettings.default_hourly_rate,
+      currency_code: teacherSettings.currency_code,
+      country: teacherSettings.country ?? '',
+    })
+    const normalizedCurrency = normalizeCurrencyCode(teacherSettings.currency_code)
+    setCurrencySelectorValue(
+      ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CZK'].includes(normalizedCurrency)
+        ? normalizedCurrency
+        : 'OTHER'
+    )
+    settingsHydratedRef.current = profile.id
+  }, [profile, teacherSettings])
 
   // Save profile mutation
   const saveProfileMutation = useMutation({
@@ -116,15 +146,53 @@ export default function SettingsPage() {
         .upsert({
           teacher_id: userData.user?.id,
           ...data,
-        })
+        }, { onConflict: 'teacher_id' })
       if (error) throw error
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teacher-settings'] })
       toast.success('Settings updated')
     },
-    onError: () => {
-      toast.error('Failed to update settings')
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Failed to update settings'
+      toast.error(message)
+    },
+  })
+
+  const connectStripeMutation = useMutation({
+    mutationFn: async () => {
+      const normalizedCountry = settingsForm.country.trim().toUpperCase()
+      const normalizedCurrency = normalizeCurrencyCode(settingsForm.currency_code)
+
+      if (!normalizedCountry || normalizedCountry.length !== 2) {
+        throw new Error('Please enter a valid 2-letter country code')
+      }
+      if (!normalizedCurrency) {
+        throw new Error('Please select a currency before connecting Stripe')
+      }
+
+      await saveSettingsMutation.mutateAsync({
+        ...settingsForm,
+        country: normalizedCountry,
+        currency_code: normalizedCurrency,
+      })
+
+      const response = await fetch('/api/stripe/connect', { method: 'POST' })
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string }
+        throw new Error(payload.error || 'Failed to start Stripe onboarding')
+      }
+
+      const payload = (await response.json()) as { url?: string }
+      if (!payload.url) {
+        throw new Error('Stripe onboarding URL is missing')
+      }
+
+      window.location.assign(payload.url)
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Stripe setup failed'
+      toast.error(message)
     },
   })
 
@@ -151,6 +219,25 @@ export default function SettingsPage() {
     'Asia/Shanghai',
     'Australia/Sydney',
   ]
+
+  const currencyOptions = [
+    { value: 'USD', label: 'USD – US Dollar' },
+    { value: 'EUR', label: 'EUR – Euro' },
+    { value: 'GBP', label: 'GBP – British Pound' },
+    { value: 'CAD', label: 'CAD – Canadian Dollar' },
+    { value: 'AUD', label: 'AUD – Australian Dollar' },
+    { value: 'CZK', label: 'CZK – Czech Koruna' },
+  ]
+
+  const stripeHasAccount = Boolean(teacherSettings?.stripe_account_id)
+  const stripeIsReady = Boolean(
+    teacherSettings?.stripe_charges_enabled && teacherSettings?.stripe_payouts_enabled
+  )
+  const stripeStatusLabel = !stripeHasAccount
+    ? 'Not connected'
+    : stripeIsReady
+    ? 'Ready'
+    : 'Incomplete'
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6">
@@ -393,6 +480,136 @@ export default function SettingsPage() {
 
         {/* Billing Tab */}
         <TabsContent value="billing" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Payments</CardTitle>
+              <CardDescription>
+                Connect a Stripe Express account to receive student payments directly.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-muted-foreground">Stripe status</p>
+                    <Badge variant={stripeIsReady ? 'default' : 'secondary'}>
+                      {stripeStatusLabel}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Stripe onboarding is required before students can purchase credits.
+                  </p>
+                </div>
+                {!stripeIsReady && (
+                  <Button
+                    onClick={() => connectStripeMutation.mutate()}
+                    disabled={connectStripeMutation.isPending || saveSettingsMutation.isPending}
+                  >
+                    {stripeHasAccount ? 'Continue Stripe setup' : 'Connect Stripe'}
+                  </Button>
+                )}
+              </div>
+              <div className="grid gap-2 max-w-sm">
+                <Label htmlFor="stripe_country">Country (ISO code)</Label>
+                <Input
+                  id="stripe_country"
+                  value={settingsForm.country}
+                  maxLength={2}
+                  placeholder="US"
+                  onChange={(e) =>
+                    setSettingsForm({
+                      ...settingsForm,
+                      country: e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase(),
+                    })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Two-letter ISO country code required for Stripe Express.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Pricing</CardTitle>
+              <CardDescription>
+                Set your default hourly rate for students who do not have an override.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="grid gap-2 lg:flex-1">
+                  <Label htmlFor="currency_code">Currency</Label>
+                  <Select
+                    value={currencySelectorValue}
+                    onValueChange={(value) => {
+                      setCurrencySelectorValue(value)
+                      if (value !== 'OTHER') {
+                        setSettingsForm({
+                          ...settingsForm,
+                          currency_code: value,
+                        })
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-full lg:max-w-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {currencyOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="OTHER">Other…</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {currencySelectorValue === 'OTHER' && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="currency_code_custom">Custom ISO code</Label>
+                      <Input
+                        id="currency_code_custom"
+                        placeholder="e.g. JPY"
+                        value={settingsForm.currency_code}
+                        onChange={(e) =>
+                          setSettingsForm({
+                            ...settingsForm,
+                            currency_code: normalizeCurrencyCode(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="grid gap-2 lg:w-72">
+                  <Label htmlFor="default_hourly_rate">
+                    Default Hourly Rate ({settingsForm.currency_code})
+                  </Label>
+                  <Input
+                    id="default_hourly_rate"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={settingsForm.default_hourly_rate}
+                    onChange={(e) =>
+                      setSettingsForm({
+                        ...settingsForm,
+                        default_hourly_rate: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <Button
+                  className="lg:self-end"
+                  onClick={() => saveSettingsMutation.mutate(settingsForm)}
+                  disabled={saveSettingsMutation.isPending}
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Pricing
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Subscription</CardTitle>
