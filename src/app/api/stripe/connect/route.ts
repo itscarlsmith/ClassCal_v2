@@ -16,6 +16,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
+    if (!user.email) {
+      return NextResponse.json(
+        { error: 'Account email is required for Stripe setup.' },
+        { status: 400 }
+      )
+    }
+
     const { data: teacherSettings, error: settingsError } = await serviceSupabase
       .from('teacher_settings')
       .select('teacher_id, currency_code, country, stripe_account_id')
@@ -47,12 +54,27 @@ export async function POST(request: Request) {
     let stripeAccountId = teacherSettings.stripe_account_id
 
     if (!stripeAccountId) {
-      const account = await stripe.accounts.create({
-        type: 'express',
-        country: countryCode,
-        default_currency: currencyCode,
-      })
-      stripeAccountId = account.id
+      try {
+        const account = await stripe.accounts.create({
+          type: 'express',
+          country: countryCode,
+          default_currency: currencyCode,
+          email: user.email,
+          capabilities: {
+            card_payments: { requested: true },
+            transfers: { requested: true },
+          },
+        })
+        stripeAccountId = account.id
+      } catch (error) {
+        console.error('Stripe connect: account creation failed', error)
+        const message = error instanceof Error ? error.message : 'Stripe account creation failed'
+        const statusCode =
+          typeof error === 'object' && error && 'statusCode' in error
+            ? Number((error as { statusCode?: number }).statusCode)
+            : 500
+        return NextResponse.json({ error: message }, { status: statusCode || 500 })
+      }
 
       const { error: updateError } = await serviceSupabase
         .from('teacher_settings')
@@ -71,12 +93,23 @@ export async function POST(request: Request) {
     const returnUrl = new URL('/teacher/stripe/return', request.url).toString()
     const refreshUrl = new URL('/teacher/settings', request.url).toString()
 
-    const accountLink = await stripe.accountLinks.create({
-      account: stripeAccountId,
-      type: 'account_onboarding',
-      return_url: returnUrl,
-      refresh_url: refreshUrl,
-    })
+    let accountLink
+    try {
+      accountLink = await stripe.accountLinks.create({
+        account: stripeAccountId,
+        type: 'account_onboarding',
+        return_url: returnUrl,
+        refresh_url: refreshUrl,
+      })
+    } catch (error) {
+      console.error('Stripe connect: account link creation failed', error)
+      const message = error instanceof Error ? error.message : 'Stripe onboarding link failed'
+      const statusCode =
+        typeof error === 'object' && error && 'statusCode' in error
+          ? Number((error as { statusCode?: number }).statusCode)
+          : 500
+      return NextResponse.json({ error: message }, { status: statusCode || 500 })
+    }
 
     return NextResponse.json({ url: accountLink.url })
   } catch (error) {

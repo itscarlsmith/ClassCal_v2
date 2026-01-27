@@ -80,12 +80,12 @@ export async function POST(request: Request) {
 
       if (!teacherId || !studentId || !Number.isFinite(credits) || credits <= 0) {
         console.error('Stripe webhook: invalid checkout metadata', metadata)
-        return NextResponse.json({ error: 'Invalid checkout metadata' }, { status: 400 })
+        return NextResponse.json({ received: true })
       }
 
       if (!paymentIntentId) {
         console.error('Stripe webhook: missing payment intent', session.payment_intent)
-        return NextResponse.json({ error: 'Missing payment intent' }, { status: 400 })
+        return NextResponse.json({ received: true })
       }
 
       const { error } = await serviceSupabase.from('credit_ledger').insert({

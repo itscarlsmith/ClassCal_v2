@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
-import { Toaster } from '@/components/ui/sonner'
 import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/store/app-store'
 
@@ -101,7 +100,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
         disableTransitionOnChange
       >
         {children}
-        <Toaster position="bottom-right" richColors closeButton />
       </ThemeProvider>
     </QueryClientProvider>
   )

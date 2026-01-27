@@ -234,10 +234,10 @@ export default function SettingsPage() {
     teacherSettings?.stripe_charges_enabled && teacherSettings?.stripe_payouts_enabled
   )
   const stripeStatusLabel = !stripeHasAccount
-    ? 'Not connected'
+    ? 'Stripe not connected'
     : stripeIsReady
-    ? 'Ready'
-    : 'Incomplete'
+    ? 'Stripe connected'
+    : 'Stripe incomplete'
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6">
@@ -386,7 +386,7 @@ export default function SettingsPage() {
                 <div className="grid gap-2">
                   <Label htmlFor="default_duration">Default Lesson Duration (minutes)</Label>
                   <Select
-                    value={settingsForm.default_lesson_duration.toString()}
+                    value={String(settingsForm.default_lesson_duration ?? 60)}
                     onValueChange={(value) =>
                       setSettingsForm({
                         ...settingsForm,
