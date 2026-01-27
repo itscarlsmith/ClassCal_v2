@@ -1,11 +1,12 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import {
   Accordion,
   AccordionContent,
@@ -16,6 +17,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { format } from 'date-fns'
 import { formatCurrency } from '@/lib/currency'
 import { getEffectiveHourlyRate } from '@/lib/pricing'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 
 type StudentRow = {
   id: string
@@ -54,6 +57,19 @@ type CreditLedgerEntry = {
 
 export default function StudentFinancePage() {
   const supabase = createClient()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const stripeStatus = (() => {
+    const direct = searchParams.get('stripe')
+    if (direct === 'success' || direct === 'cancelled') return direct
+    const legacy = searchParams.get('payment')
+    if (legacy === 'success' || legacy === 'cancelled') return legacy
+    return null
+  })()
+  const [creditsByTeacherId, setCreditsByTeacherId] = useState<Record<string, number>>({})
+  const [checkoutLoadingId, setCheckoutLoadingId] = useState<string | null>(null)
+  const stripeToastShownRef = useRef(false)
 
   const { data: students, isLoading: isStudentsLoading } = useQuery({
     queryKey: ['student-finance-students'],
@@ -157,6 +173,13 @@ export default function StudentFinancePage() {
       const stripeReady = Boolean(
         settings?.stripe_charges_enabled && settings?.stripe_payouts_enabled
       )
+      const primaryStudent = studentRows[0]
+      const primaryRate = primaryStudent
+        ? getEffectiveHourlyRate({
+            studentHourlyRate: primaryStudent.hourly_rate,
+            teacherDefaultHourlyRate: teacherDefaultRate,
+          })
+        : teacherDefaultRate
       const effectiveRates = studentRows.map((student) =>
         getEffectiveHourlyRate({
           studentHourlyRate: student.hourly_rate,
@@ -191,9 +214,79 @@ export default function StudentFinancePage() {
         reservedCount,
         ledger,
         stripeReady,
+        primaryStudentId: primaryStudent?.id ?? '',
+        primaryRate,
       }
     })
   }, [students, settingsByTeacherId, ledgerByTeacherId])
+
+  const handleBuyCredits = async (group: (typeof groups)[number]) => {
+    if (!group.primaryStudentId) {
+      toast.error('Student record not found for checkout.')
+      return
+    }
+
+    const credits = creditsByTeacherId[group.teacherId] ?? 1
+    if (!Number.isInteger(credits) || credits <= 0) {
+      toast.error('Please enter a valid number of credits.')
+      return
+    }
+
+    setCheckoutLoadingId(group.teacherId)
+    try {
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teacherId: group.teacherId,
+          studentId: group.primaryStudentId,
+          credits,
+        }),
+      })
+
+      const payload = (await response.json()) as { url?: string; error?: string }
+      if (!response.ok) {
+        throw new Error(payload.error || 'Unable to start Stripe checkout.')
+      }
+
+      if (!payload.url) {
+        throw new Error('Stripe checkout URL is missing.')
+      }
+
+      window.location.assign(payload.url)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to start checkout.'
+      toast.error(message)
+    } finally {
+      setCheckoutLoadingId(null)
+    }
+  }
+
+  useEffect(() => {
+    if (!stripeStatus) return
+
+    const toastDuration = 4000
+    if (stripeToastShownRef.current) return
+    stripeToastShownRef.current = true
+
+    // Delay one tick so the global <Toaster /> has definitely mounted/subscribed.
+    const toastTimerId = window.setTimeout(() => {
+      if (stripeStatus === 'success') {
+        toast.success('Payment successful — credits have been added', { duration: toastDuration })
+      } else if (stripeStatus === 'cancelled') {
+        toast('Payment cancelled — no credits were added', { duration: toastDuration })
+      }
+    }, 0)
+
+    const timeoutId = window.setTimeout(() => {
+      router.replace(pathname, { scroll: false })
+    }, toastDuration + 50)
+
+    return () => {
+      window.clearTimeout(toastTimerId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [stripeStatus, pathname, router])
 
   return (
     <section className="p-8 space-y-6">
@@ -225,9 +318,42 @@ export default function StudentFinancePage() {
                     )}
                   </div>
                   <div className="flex flex-col items-end gap-1 lg:order-3">
-                    <Button className="lg:order-3" disabled={!group.stripeReady}>
-                      Buy credits
-                    </Button>
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="grid gap-1">
+                        <label className="text-xs text-muted-foreground" htmlFor={`credits-${group.teacherId}`}>
+                          Credits to buy
+                        </label>
+                        <Input
+                          id={`credits-${group.teacherId}`}
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={creditsByTeacherId[group.teacherId] ?? 1}
+                          onChange={(event) => {
+                            const nextValue = Number(event.target.value)
+                            setCreditsByTeacherId((prev) => ({
+                              ...prev,
+                              [group.teacherId]: Number.isFinite(nextValue) ? nextValue : 1,
+                            }))
+                          }}
+                          className="w-28 text-right"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Total:{' '}
+                          {formatCurrency(
+                            (creditsByTeacherId[group.teacherId] ?? 1) * group.primaryRate,
+                            group.currencyCode
+                          )}
+                        </p>
+                      </div>
+                      <Button
+                        className="lg:order-3"
+                        disabled={!group.stripeReady || checkoutLoadingId === group.teacherId}
+                        onClick={() => handleBuyCredits(group)}
+                      >
+                        Buy credits
+                      </Button>
+                    </div>
                     {!group.stripeReady && (
                       <p className="text-xs text-muted-foreground">
                         Teacher has not completed payment setup
