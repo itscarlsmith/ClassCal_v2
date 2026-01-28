@@ -20,14 +20,33 @@ import {
 } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { Save, User, Calendar, Receipt, LogOut } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import type { Profile, TeacherSettings } from '@/types/database'
 import { normalizeCurrencyCode } from '@/lib/currency'
+
+type SettingsTab = 'profile' | 'scheduling' | 'billing' | 'notifications' | 'calendar-sync'
+
+const supportedTabs: SettingsTab[] = [
+  'profile',
+  'scheduling',
+  'billing',
+  'notifications',
+  'calendar-sync',
+]
+
+function normalizeTab(value: string | null): SettingsTab {
+  if (!value) return 'profile'
+  const match = supportedTabs.find((tab) => tab === value)
+  return match ?? 'profile'
+}
 
 export default function SettingsPage() {
   const supabase = createClient()
   const queryClient = useQueryClient()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const tabFromQuery = normalizeTab(searchParams.get('tab'))
+  const [activeTab, setActiveTab] = useState<SettingsTab>(tabFromQuery)
 
   // Fetch profile
   const { data: profile } = useQuery({
@@ -79,6 +98,10 @@ export default function SettingsPage() {
   const [settingsForm, setSettingsForm] = useState(settingsFormRef.current)
   const settingsHydratedRef = useRef<string | null>(null)
   const [currencySelectorValue, setCurrencySelectorValue] = useState('USD')
+
+  useEffect(() => {
+    setActiveTab(tabFromQuery)
+  }, [tabFromQuery])
 
   useEffect(() => {
     if (!profile) return
@@ -250,7 +273,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="profile">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SettingsTab)}>
         <TabsList>
           <TabsTrigger value="profile">
             <User className="w-4 h-4 mr-2" />
@@ -263,6 +286,12 @@ export default function SettingsPage() {
           <TabsTrigger value="billing">
             <Receipt className="w-4 h-4 mr-2" />
             Billing
+          </TabsTrigger>
+          <TabsTrigger value="notifications">
+            Notifications
+          </TabsTrigger>
+          <TabsTrigger value="calendar-sync">
+            Calendar sync
           </TabsTrigger>
         </TabsList>
 
@@ -627,6 +656,38 @@ export default function SettingsPage() {
                 </div>
                 <Button variant="outline">Upgrade</Button>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="notifications" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Notification settings</CardTitle>
+              <CardDescription>
+                Manage how and when you receive ClassCal notifications.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Notification preferences will be available soon.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="calendar-sync" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Calendar sync</CardTitle>
+              <CardDescription>
+                Connect external calendars to keep your schedule in sync.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Calendar sync setup will be available soon.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

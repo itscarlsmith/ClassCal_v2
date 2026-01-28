@@ -48,6 +48,7 @@
 /* ClassCal Custom Theme - Soft, modern, warm neutrals */
 :root {
   --radius: 0.75rem;
+  --utility-bar-height: 56px;
   
   /* Main backgrounds - warm off-white/cream tones */
   --background: oklch(0.985 0.002 90);

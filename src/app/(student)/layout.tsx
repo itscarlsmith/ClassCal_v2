@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { StudentSidebar } from '@/components/sidebar/student-sidebar'
-import { StudentTopbar } from '@/components/sidebar/student-topbar'
+import { GlobalUtilityBar } from '@/components/utility-bar/global-utility-bar'
 import { DrawerManager } from '@/components/drawer/drawer-manager'
 
 export default async function StudentLayout({
@@ -49,7 +49,7 @@ export default async function StudentLayout({
     <div className="flex h-screen overflow-hidden bg-background">
       <StudentSidebar />
       <div className="flex-1 flex flex-col">
-        <StudentTopbar />
+        <GlobalUtilityBar />
         <main className="flex-1 overflow-auto bg-muted/20">{children}</main>
       </div>
       <DrawerManager />

@@ -1,5 +1,6 @@
 import { Sidebar } from '@/components/sidebar/sidebar'
 import { DrawerManager } from '@/components/drawer/drawer-manager'
+import { GlobalUtilityBar } from '@/components/utility-bar/global-utility-bar'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -33,9 +34,10 @@ export default async function AppLayout({
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
-      <main className="flex-1 overflow-auto">
-        {children}
-      </main>
+      <div className="flex-1 flex flex-col">
+        <GlobalUtilityBar />
+        <main className="flex-1 overflow-auto">{children}</main>
+      </div>
       <DrawerManager />
     </div>
   )

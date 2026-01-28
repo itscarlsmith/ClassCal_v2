@@ -106,7 +106,7 @@ export function LiveLessonCall({ lessonId }: LiveLessonCallProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[60] bg-black text-white"
+      className="fixed left-0 right-0 bottom-0 top-[var(--utility-bar-height)] z-[60] bg-black text-white"
       onMouseMove={handlePointerActivity}
       role="presentation"
     >
