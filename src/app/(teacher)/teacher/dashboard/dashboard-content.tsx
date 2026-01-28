@@ -57,16 +57,7 @@ export function DashboardContent({
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Welcome back, {profile?.full_name?.split(' ')[0] || 'Teacher'}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Here&apos;s what&apos;s happening with your teaching business
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => openDrawer('student', 'new')}>
             <Plus className="w-4 h-4 mr-2" />

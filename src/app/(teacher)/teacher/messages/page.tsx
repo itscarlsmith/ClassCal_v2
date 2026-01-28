@@ -169,7 +169,6 @@ export default function MessagesPage() {
       {/* Thread List */}
       <div className="w-80 border-r border-border flex flex-col bg-card">
         <div className="p-4 border-b border-border">
-          <h1 className="text-xl font-bold mb-4">Messages</h1>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input

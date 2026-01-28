@@ -288,14 +288,6 @@ export default function AvailabilityPage() {
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Availability</h1>
-        <p className="text-muted-foreground mt-1">
-          Set your weekly availability for student bookings
-        </p>
-      </div>
-
       {/* Weekly Schedule */}
       <Card>
         <CardHeader>

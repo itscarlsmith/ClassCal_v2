@@ -96,14 +96,7 @@ export default function FinancePage() {
 
   return (
     <div className="p-8 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Finance</h1>
-          <p className="text-muted-foreground mt-1">
-            Track your earnings, payments, and packages
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => openDrawer('package', 'new')}>
             <Package className="w-4 h-4 mr-2" />

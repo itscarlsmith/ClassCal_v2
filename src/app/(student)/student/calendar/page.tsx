@@ -369,14 +369,7 @@ export default function StudentCalendarPage() {
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <div className="flex items-center justify-between px-8 py-5 border-b border-border/60">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Calendar</h1>
-          <p className="text-xs text-muted-foreground/70 mt-0.5">
-            View lessons and available slots
-          </p>
-        </div>
-
+      <div className="flex items-center justify-end px-8 py-5 border-b border-border/60">
         <div className="flex items-center gap-6">
           <div className="min-w-[200px]">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1.5 font-medium">

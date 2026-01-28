@@ -173,15 +173,7 @@ export default async function StudentDashboardPage() {
 
   return (
     <section className="p-8 max-w-7xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Welcome back, {greetingName}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Here&apos;s a quick overview of your learning
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex flex-wrap gap-2">
           <Link href="/student/calendar">
             <Button variant="default">Book Lesson</Button>

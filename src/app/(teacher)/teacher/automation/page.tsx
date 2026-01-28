@@ -201,10 +201,6 @@ export default function AutomationPage() {
       <div className="p-8 max-w-4xl mx-auto">
         <div className="text-center py-12">
           <Zap className="w-16 h-16 mx-auto text-muted-foreground/50 mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Automation</h1>
-          <p className="text-muted-foreground mb-6">
-            Set up automated reminders for lessons, homework, and payments
-          </p>
           <Button onClick={() => createDefaultRulesMutation.mutate()}>
             <Zap className="w-4 h-4 mr-2" />
             Set Up Default Automations
@@ -216,13 +212,6 @@ export default function AutomationPage() {
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Automation</h1>
-        <p className="text-muted-foreground mt-1">
-          Automate reminders and notifications to save time
-        </p>
-      </div>
 
       {/* Lesson Reminders */}
       <Card>

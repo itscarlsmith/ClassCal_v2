@@ -274,8 +274,7 @@ export default function CalendarPage() {
     <div className="h-full flex flex-col bg-background">
       {/* Calendar Header */}
       <div className="flex items-center justify-between px-8 py-5 border-b border-border/60">
-        <div className="flex items-center gap-6">
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Calendar</h1>
+        <div className="flex items-center gap-4">
           <div className="flex items-center gap-0.5 bg-muted/60 rounded-full p-1">
             <Button
               variant={calendarView === 'dayGridMonth' ? 'secondary' : 'ghost'}

@@ -185,14 +185,6 @@ export default function StudentLessonsPage() {
 
   return (
     <section className="p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Lessons</h1>
-          <p className="text-muted-foreground mt-1">
-            Review your upcoming and past lessons.
-          </p>
-        </div>
-      </div>
 
       <Card>
         <CardContent className="p-6 space-y-4">

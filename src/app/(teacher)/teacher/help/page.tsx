@@ -42,13 +42,6 @@ const changelog = [
 export default function HelpPage() {
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Help & Support</h1>
-        <p className="text-muted-foreground mt-1">
-          Get help using ClassCal and learn about new features
-        </p>
-      </div>
 
       {/* Quick Links */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
