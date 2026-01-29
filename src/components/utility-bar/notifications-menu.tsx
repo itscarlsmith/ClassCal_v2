@@ -13,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { getNotificationPriority, isNotificationVisibleForRole } from './notification-priority'
 import { getNotificationHref } from './notification-routing'
 import { useMarkNotificationRead, useNotificationsList, useUnreadNotificationsCount } from './use-notifications'
 import type { Notification } from '@/types/database'
@@ -36,7 +35,9 @@ function formatTimestamp(value: string) {
 
 function sortNotifications(items: Notification[]) {
   return [...items].sort((a, b) => {
-    const priorityDiff = getNotificationPriority(b.type) - getNotificationPriority(a.type)
+    const priorityA = a.priority ?? 0
+    const priorityB = b.priority ?? 0
+    const priorityDiff = priorityB - priorityA
     if (priorityDiff !== 0) return priorityDiff
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   })
@@ -49,9 +50,10 @@ export function NotificationsMenu({ role, userId }: NotificationsMenuProps) {
   const markRead = useMarkNotificationRead(userId)
 
   const visibleNotifications = useMemo(() => {
-    const filtered = notifications.filter((notification) =>
-      isNotificationVisibleForRole(role, notification.type)
-    )
+    const filtered = notifications.filter((notification) => {
+      if (notification.role) return notification.role === role
+      return true
+    })
     return sortNotifications(filtered)
   }, [notifications, role])
 

@@ -23,6 +23,7 @@ import { Save, User, Calendar, Receipt, LogOut } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Profile, TeacherSettings } from '@/types/database'
 import { normalizeCurrencyCode } from '@/lib/currency'
+import { NotificationSettingsPanel } from '@/components/notifications/notification-settings'
 
 type SettingsTab = 'profile' | 'scheduling' | 'billing' | 'notifications' | 'calendar-sync'
 
@@ -653,19 +654,7 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="notifications" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification settings</CardTitle>
-              <CardDescription>
-                Manage how and when you receive ClassCal notifications.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Notification preferences will be available soon.
-              </p>
-            </CardContent>
-          </Card>
+          <NotificationSettingsPanel />
         </TabsContent>
 
         <TabsContent value="calendar-sync" className="mt-6 space-y-6">

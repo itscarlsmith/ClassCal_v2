@@ -9,6 +9,27 @@ interface StatusRequestBody {
   action: Action
 }
 
+type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>
+
+type NotificationEventInsert = {
+  user_id: string
+  notification_type: 'lesson_accepted_or_denied_by_student' | 'lesson_changed'
+  event_key: string
+  source_type: 'lesson'
+  source_id: string
+  role: 'teacher' | 'student'
+  priority: number
+  payload: Record<string, unknown>
+}
+
+async function insertNotificationEvents(serviceSupabase: ServiceClient, events: NotificationEventInsert[]) {
+  if (!events.length) return
+  const { error } = await serviceSupabase.from('notification_events').insert(events)
+  if (error) {
+    console.error('Failed to insert notification events', error)
+  }
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -159,6 +180,103 @@ export async function POST(
         { status: 500 }
       )
     }
+
+    const { data: studentRow } = await serviceSupabase
+      .from('students')
+      .select('id, user_id, full_name')
+      .eq('id', lesson.student_id)
+      .single()
+
+    const { data: teacherProfile } = await serviceSupabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', lesson.teacher_id)
+      .single()
+
+    const teacherName = teacherProfile?.full_name || 'your teacher'
+    const studentName = studentRow?.full_name || 'your student'
+    const events: NotificationEventInsert[] = []
+
+    if (action === 'accept' || action === 'decline') {
+      const variant = action === 'accept' ? 'accepted' : 'denied'
+      const title = action === 'accept' ? 'Lesson accepted' : 'Lesson declined'
+      const message = `Lesson with ${studentName} was ${variant}.`
+
+      events.push({
+        user_id: lesson.teacher_id,
+        notification_type: 'lesson_accepted_or_denied_by_student',
+        event_key: `lesson:${lessonId}:student_response:${variant}:${updatedLesson.updated_at ?? new Date().toISOString()}`,
+        source_type: 'lesson',
+        source_id: lessonId,
+        role: 'teacher',
+        priority: 3,
+        payload: {
+          href: `/teacher/lessons?lesson=${lessonId}`,
+          title,
+          message,
+          email_subject: title,
+          email_body: message,
+          lesson_id: lessonId,
+          start_time: updatedLesson.start_time,
+          end_time: updatedLesson.end_time,
+          variant,
+        },
+      })
+    }
+
+    if (newStatus === 'cancelled') {
+      const eventKey = `lesson:${lessonId}:changed:cancelled:${updatedLesson.updated_at ?? new Date().toISOString()}`
+      const teacherTitle = 'Lesson cancelled'
+      const teacherMessage = `Lesson with ${studentName} was canceled.`
+      const studentTitle = 'Lesson cancelled'
+      const studentMessage = `Lesson with ${teacherName} was canceled.`
+
+      events.push({
+        user_id: lesson.teacher_id,
+        notification_type: 'lesson_changed',
+        event_key: eventKey,
+        source_type: 'lesson',
+        source_id: lessonId,
+        role: 'teacher',
+        priority: 3,
+        payload: {
+          href: `/teacher/lessons?lesson=${lessonId}`,
+          title: teacherTitle,
+          message: teacherMessage,
+          email_subject: teacherTitle,
+          email_body: teacherMessage,
+          lesson_id: lessonId,
+          start_time: updatedLesson.start_time,
+          end_time: updatedLesson.end_time,
+          variant: 'cancelled',
+        },
+      })
+
+      if (studentRow?.user_id) {
+        events.push({
+          user_id: studentRow.user_id,
+          notification_type: 'lesson_changed',
+          event_key: eventKey,
+          source_type: 'lesson',
+          source_id: lessonId,
+          role: 'student',
+          priority: 3,
+          payload: {
+            href: `/student/lessons?lesson=${lessonId}`,
+            title: studentTitle,
+            message: studentMessage,
+            email_subject: studentTitle,
+            email_body: studentMessage,
+            lesson_id: lessonId,
+            start_time: updatedLesson.start_time,
+            end_time: updatedLesson.end_time,
+            variant: 'cancelled',
+          },
+        })
+      }
+    }
+
+    await insertNotificationEvents(serviceSupabase, events)
 
     return NextResponse.json({
       lesson: updatedLesson,

@@ -18,6 +18,27 @@ interface BookingRequestBody {
   note?: string
 }
 
+type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>
+
+type NotificationEventInsert = {
+  user_id: string
+  notification_type: 'lesson_booked_by_student'
+  event_key: string
+  source_type: 'lesson'
+  source_id: string
+  role: 'teacher'
+  priority: number
+  payload: Record<string, unknown>
+}
+
+async function insertNotificationEvents(serviceSupabase: ServiceClient, events: NotificationEventInsert[]) {
+  if (!events.length) return
+  const { error } = await serviceSupabase.from('notification_events').insert(events)
+  if (error) {
+    console.error('Failed to insert notification events', error)
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as BookingRequestBody
@@ -238,6 +259,32 @@ export async function POST(request: Request) {
         { status: 500 }
       )
     }
+
+    const studentName = student.full_name || 'a student'
+    const titleText = 'Lesson booked'
+    const messageText = `Lesson booked by ${studentName}.`
+
+    await insertNotificationEvents(serviceSupabase, [
+      {
+        user_id: teacherId,
+        notification_type: 'lesson_booked_by_student',
+        event_key: `lesson:${newLesson.id}:booked_by_student:${newLesson.created_at}`,
+        source_type: 'lesson',
+        source_id: newLesson.id,
+        role: 'teacher',
+        priority: 3,
+        payload: {
+          href: `/teacher/lessons?lesson=${newLesson.id}`,
+          title: titleText,
+          message: messageText,
+          email_subject: titleText,
+          email_body: messageText,
+          lesson_id: newLesson.id,
+          start_time: newLesson.start_time,
+          end_time: newLesson.end_time,
+        },
+      },
+    ])
 
     return NextResponse.json({ lesson: newLesson })
   } catch (error) {

@@ -14,6 +14,7 @@ export function useNotificationsList(userId: string | null) {
         .from('notifications')
         .select('*')
         .eq('user_id', userId)
+        .order('priority', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(50)
 
@@ -51,7 +52,7 @@ export function useMarkNotificationRead(userId: string | null) {
       const supabase = createClient()
       const { error } = await supabase
         .from('notifications')
-        .update({ is_read: true })
+        .update({ is_read: true, read_at: new Date().toISOString() })
         .eq('id', id)
 
       if (error) throw error

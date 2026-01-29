@@ -13,6 +13,27 @@ interface PatchBody {
   action?: 'cancel'
 }
 
+type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>
+
+type NotificationEventInsert = {
+  user_id: string
+  notification_type: 'lesson_changed'
+  event_key: string
+  source_type: 'lesson'
+  source_id: string
+  role: 'teacher' | 'student'
+  priority: number
+  payload: Record<string, unknown>
+}
+
+async function insertNotificationEvents(serviceSupabase: ServiceClient, events: NotificationEventInsert[]) {
+  if (!events.length) return
+  const { error } = await serviceSupabase.from('notification_events').insert(events)
+  if (error) {
+    console.error('Failed to insert notification events', error)
+  }
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -47,6 +68,21 @@ export async function PATCH(
     const now = new Date()
     const currentStart = new Date(lesson.start_time)
     const currentEnd = new Date(lesson.end_time)
+
+    const { data: studentRow } = await serviceSupabase
+      .from('students')
+      .select('id, user_id, full_name')
+      .eq('id', lesson.student_id)
+      .single()
+
+    const { data: teacherProfile } = await serviceSupabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', lesson.teacher_id)
+      .single()
+
+    const teacherName = teacherProfile?.full_name || 'your teacher'
+    const studentName = studentRow?.full_name || 'your student'
 
     // Parse incoming times if provided
     const newStart = body.start_time ? new Date(body.start_time) : currentStart
@@ -91,6 +127,55 @@ export async function PATCH(
         console.error('Error cancelling lesson', cancelError)
         return NextResponse.json({ error: 'Failed to cancel lesson.' }, { status: 500 })
       }
+
+      const eventKey = `lesson:${lessonId}:changed:cancelled:${cancelledLesson.updated_at ?? new Date().toISOString()}`
+      const events: NotificationEventInsert[] = [
+        {
+          user_id: lesson.teacher_id,
+          notification_type: 'lesson_changed',
+          event_key: eventKey,
+          source_type: 'lesson',
+          source_id: lessonId,
+          role: 'teacher',
+          priority: 3,
+          payload: {
+            href: `/teacher/lessons?lesson=${lessonId}`,
+            title: 'Lesson cancelled',
+            message: `Lesson with ${studentName} was canceled.`,
+            email_subject: 'Lesson cancelled',
+            email_body: `Lesson with ${studentName} was canceled.`,
+            lesson_id: lessonId,
+            start_time: lesson.start_time,
+            end_time: lesson.end_time,
+            variant: 'cancelled',
+          },
+        },
+      ]
+
+      if (studentRow?.user_id) {
+        events.push({
+          user_id: studentRow.user_id,
+          notification_type: 'lesson_changed',
+          event_key: eventKey,
+          source_type: 'lesson',
+          source_id: lessonId,
+          role: 'student',
+          priority: 3,
+          payload: {
+            href: `/student/lessons?lesson=${lessonId}`,
+            title: 'Lesson cancelled',
+            message: `Lesson with ${teacherName} was canceled.`,
+            email_subject: 'Lesson cancelled',
+            email_body: `Lesson with ${teacherName} was canceled.`,
+            lesson_id: lessonId,
+            start_time: lesson.start_time,
+            end_time: lesson.end_time,
+            variant: 'cancelled',
+          },
+        })
+      }
+
+      await insertNotificationEvents(serviceSupabase, events)
 
       return NextResponse.json({
         lesson: cancelledLesson,
@@ -200,22 +285,75 @@ export async function PATCH(
       return NextResponse.json({ error: 'No changes provided.' }, { status: 400 })
     }
 
-    const { error: updateError } = await serviceSupabase
+    const { data: updatedLesson, error: updateError } = await serviceSupabase
       .from('lessons')
       .update(updatePayload)
       .eq('id', lessonId)
+      .select('*')
+      .single()
 
-    if (updateError) {
+    if (updateError || !updatedLesson) {
       console.error('Error updating lesson', updateError)
       return NextResponse.json({ error: 'Failed to update lesson.' }, { status: 500 })
+    }
+
+    if (timeChanged) {
+      const eventKey = `lesson:${lessonId}:changed:rescheduled:${updatedLesson.updated_at ?? new Date().toISOString()}`
+      const events: NotificationEventInsert[] = [
+        {
+          user_id: lesson.teacher_id,
+          notification_type: 'lesson_changed',
+          event_key: eventKey,
+          source_type: 'lesson',
+          source_id: lessonId,
+          role: 'teacher',
+          priority: 3,
+          payload: {
+            href: `/teacher/lessons?lesson=${lessonId}`,
+            title: 'Lesson rescheduled',
+            message: `Lesson with ${studentName} was rescheduled.`,
+            email_subject: 'Lesson rescheduled',
+            email_body: `Lesson with ${studentName} was rescheduled.`,
+            lesson_id: lessonId,
+            start_time: updatedLesson.start_time,
+            end_time: updatedLesson.end_time,
+            variant: 'rescheduled',
+          },
+        },
+      ]
+
+      if (studentRow?.user_id) {
+        events.push({
+          user_id: studentRow.user_id,
+          notification_type: 'lesson_changed',
+          event_key: eventKey,
+          source_type: 'lesson',
+          source_id: lessonId,
+          role: 'student',
+          priority: 3,
+          payload: {
+            href: `/student/lessons?lesson=${lessonId}`,
+            title: 'Lesson rescheduled',
+            message: `Lesson with ${teacherName} was rescheduled.`,
+            email_subject: 'Lesson rescheduled',
+            email_body: `Lesson with ${teacherName} was rescheduled.`,
+            lesson_id: lessonId,
+            start_time: updatedLesson.start_time,
+            end_time: updatedLesson.end_time,
+            variant: 'rescheduled',
+          },
+        })
+      }
+
+      await insertNotificationEvents(serviceSupabase, events)
     }
 
     return NextResponse.json({
       lesson: {
         id: lessonId,
         status: nextStatus,
-        start_time: updatePayload.start_time ?? lesson.start_time,
-        end_time: updatePayload.end_time ?? lesson.end_time,
+        start_time: updatedLesson.start_time,
+        end_time: updatedLesson.end_time,
       },
     })
   } catch (error) {
