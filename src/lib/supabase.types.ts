@@ -16,6 +16,27 @@ export type HomeworkStatus =
   | 'cancelled'
   | 'needs_revision'
 export type RecurrencePattern = 'once' | 'daily' | 'weekly' | 'biweekly' | 'monthly'
+export type NotificationType =
+  | 'lesson_upcoming_reminder'
+  | 'lesson_changed'
+  | 'lesson_scheduled_by_teacher'
+  | 'lesson_accepted_or_denied_by_student'
+  | 'lesson_booked_by_student'
+  | 'homework_assigned'
+  | 'homework_due_soon'
+  | 'homework_submitted'
+  | 'message_received'
+  | 'credit_threshold_reached'
+export type NotificationSource = 'lesson' | 'homework' | 'message' | 'credits'
+export type NotificationRole = 'teacher' | 'student'
+export type NotificationEventStatus = 'new' | 'processed' | 'skipped' | 'failed'
+export type NotificationEmailStatus =
+  | 'pending'
+  | 'sending'
+  | 'sent'
+  | 'failed'
+  | 'canceled'
+  | 'skipped'
 
 export interface Database {
   public: {
@@ -630,6 +651,13 @@ export interface Database {
           message: string
           is_read: boolean
           data: Json | null
+          notification_type: NotificationType | null
+          source_type: NotificationSource | null
+          source_id: string | null
+          role: NotificationRole | null
+          priority: number
+          event_key: string | null
+          read_at: string | null
           created_at: string
         }
         Insert: {
@@ -640,6 +668,13 @@ export interface Database {
           message: string
           is_read?: boolean
           data?: Json | null
+          notification_type?: NotificationType | null
+          source_type?: NotificationSource | null
+          source_id?: string | null
+          role?: NotificationRole | null
+          priority?: number
+          event_key?: string | null
+          read_at?: string | null
           created_at?: string
         }
         Update: {
@@ -649,6 +684,227 @@ export interface Database {
           message?: string
           is_read?: boolean
           data?: Json | null
+          notification_type?: NotificationType | null
+          source_type?: NotificationSource | null
+          source_id?: string | null
+          role?: NotificationRole | null
+          priority?: number
+          event_key?: string | null
+          read_at?: string | null
+        }
+      }
+      notification_type_catalog: {
+        Row: {
+          notification_type: NotificationType
+          label: string
+          category: string
+          allowed_roles: NotificationRole[]
+          supports_timing: boolean
+          supports_thresholds: boolean
+          default_in_app_enabled: boolean
+          default_email_enabled: boolean
+          default_timing_minutes: number[] | null
+          default_credit_thresholds: number[] | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          notification_type: NotificationType
+          label: string
+          category: string
+          allowed_roles: NotificationRole[]
+          supports_timing?: boolean
+          supports_thresholds?: boolean
+          default_in_app_enabled?: boolean
+          default_email_enabled?: boolean
+          default_timing_minutes?: number[] | null
+          default_credit_thresholds?: number[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          label?: string
+          category?: string
+          allowed_roles?: NotificationRole[]
+          supports_timing?: boolean
+          supports_thresholds?: boolean
+          default_in_app_enabled?: boolean
+          default_email_enabled?: boolean
+          default_timing_minutes?: number[] | null
+          default_credit_thresholds?: number[] | null
+          updated_at?: string
+        }
+      }
+      notification_preferences: {
+        Row: {
+          id: string
+          user_id: string
+          notification_type: NotificationType
+          in_app_enabled: boolean
+          email_enabled: boolean
+          timing_minutes: number[] | null
+          credit_thresholds: number[] | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          notification_type: NotificationType
+          in_app_enabled?: boolean
+          email_enabled?: boolean
+          timing_minutes?: number[] | null
+          credit_thresholds?: number[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          notification_type?: NotificationType
+          in_app_enabled?: boolean
+          email_enabled?: boolean
+          timing_minutes?: number[] | null
+          credit_thresholds?: number[] | null
+          updated_at?: string
+        }
+      }
+      notification_events: {
+        Row: {
+          id: string
+          user_id: string
+          notification_type: NotificationType
+          event_key: string
+          source_type: NotificationSource
+          source_id: string | null
+          role: NotificationRole
+          priority: number
+          payload: Json
+          status: NotificationEventStatus
+          created_at: string
+          processed_at: string | null
+          last_error: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          notification_type: NotificationType
+          event_key: string
+          source_type: NotificationSource
+          source_id?: string | null
+          role: NotificationRole
+          priority?: number
+          payload?: Json
+          status?: NotificationEventStatus
+          created_at?: string
+          processed_at?: string | null
+          last_error?: string | null
+        }
+        Update: {
+          user_id?: string
+          notification_type?: NotificationType
+          event_key?: string
+          source_type?: NotificationSource
+          source_id?: string | null
+          role?: NotificationRole
+          priority?: number
+          payload?: Json
+          status?: NotificationEventStatus
+          processed_at?: string | null
+          last_error?: string | null
+        }
+      }
+      notification_email_outbox: {
+        Row: {
+          id: string
+          user_id: string
+          event_key: string
+          notification_type: NotificationType
+          source_type: NotificationSource
+          source_id: string | null
+          role: NotificationRole
+          priority: number
+          to_email: string
+          subject: string
+          text_body: string
+          cta_url: string
+          template_data: Json | null
+          scheduled_for: string
+          status: NotificationEmailStatus
+          attempt_count: number
+          last_error: string | null
+          sent_at: string | null
+          locked_at: string | null
+          locked_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          event_key: string
+          notification_type: NotificationType
+          source_type: NotificationSource
+          source_id?: string | null
+          role: NotificationRole
+          priority?: number
+          to_email: string
+          subject: string
+          text_body: string
+          cta_url: string
+          template_data?: Json | null
+          scheduled_for?: string
+          status?: NotificationEmailStatus
+          attempt_count?: number
+          last_error?: string | null
+          sent_at?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          event_key?: string
+          notification_type?: NotificationType
+          source_type?: NotificationSource
+          source_id?: string | null
+          role?: NotificationRole
+          priority?: number
+          to_email?: string
+          subject?: string
+          text_body?: string
+          cta_url?: string
+          template_data?: Json | null
+          scheduled_for?: string
+          status?: NotificationEmailStatus
+          attempt_count?: number
+          last_error?: string | null
+          sent_at?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          updated_at?: string
+        }
+      }
+      notification_dispatch_config: {
+        Row: {
+          id: number
+          dispatch_url: string | null
+          dispatch_secret: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          dispatch_url?: string | null
+          dispatch_secret?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          dispatch_url?: string | null
+          dispatch_secret?: string | null
+          updated_at?: string
         }
       }
       teacher_settings: {
@@ -714,6 +970,11 @@ export interface Database {
       lesson_status: LessonStatus
       homework_status: HomeworkStatus
       recurrence_pattern: RecurrencePattern
+      notification_type: NotificationType
+      notification_source: NotificationSource
+      notification_role: NotificationRole
+      notification_event_status: NotificationEventStatus
+      notification_email_status: NotificationEmailStatus
     }
   }
 }
@@ -735,6 +996,8 @@ export type Payment = Database['public']['Tables']['payments']['Row']
 export type CreditLedger = Database['public']['Tables']['credit_ledger']['Row']
 export type AutomationRule = Database['public']['Tables']['automation_rules']['Row']
 export type Notification = Database['public']['Tables']['notifications']['Row']
+export type NotificationDispatchConfig =
+  Database['public']['Tables']['notification_dispatch_config']['Row']
 export type TeacherSettings = Database['public']['Tables']['teacher_settings']['Row']
 
 export type ProfileInsert = Database['public']['Tables']['profiles']['Insert']

@@ -17,14 +17,17 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Plus, Search, Users, CreditCard, Mail, Phone } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Student } from '@/types/database'
 import { formatCurrency } from '@/lib/currency'
 import { getEffectiveHourlyRate } from '@/lib/pricing'
+import { useSearchParams } from 'next/navigation'
 
 export default function StudentsPage() {
   const { openDrawer } = useAppStore()
   const supabase = createClient()
+  const searchParams = useSearchParams()
+  const deepLinkHandledRef = useRef<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
   // Fetch students
@@ -61,6 +64,15 @@ export default function StudentsPage() {
       student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       student.email.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  useEffect(() => {
+    const studentId = searchParams.get('student')
+    if (!studentId || deepLinkHandledRef.current === studentId) return
+    if (students && students.some((student) => student.id === studentId)) {
+      deepLinkHandledRef.current = studentId
+      openDrawer('student', studentId)
+    }
+  }, [openDrawer, searchParams, students])
 
   const getInitials = (name: string) => {
     return name

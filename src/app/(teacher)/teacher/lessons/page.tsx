@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/store/app-store'
@@ -13,14 +14,23 @@ import { format, isPast, isFuture, isToday } from 'date-fns'
 import type { Lesson, Student } from '@/types/database'
 import { isJoinWindowOpen } from '@/lib/lesson-join'
 import { useNow } from '@/lib/lesson-join-client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 type LessonWithStudent = Lesson & { student: Pick<Student, 'id' | 'full_name' | 'avatar_url' | 'email'> }
 
 export default function LessonsPage() {
   const { openDrawer } = useAppStore()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const deepLinkHandledRef = useRef<string | null>(null)
   const supabase = createClient()
+
+  useEffect(() => {
+    const lessonId = searchParams.get('lesson')
+    if (!lessonId || deepLinkHandledRef.current === lessonId) return
+    deepLinkHandledRef.current = lessonId
+    openDrawer('lesson', lessonId)
+  }, [openDrawer, searchParams])
 
   const { data: authUser } = useQuery({
     queryKey: ['auth-user'],

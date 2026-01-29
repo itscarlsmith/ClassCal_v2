@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/store/app-store'
@@ -16,12 +17,22 @@ import {
   normalizeHomeworkStatus,
   presentHomeworkStatus,
 } from '@/lib/homework-status'
+import { useSearchParams } from 'next/navigation'
 
 type HomeworkWithStudent = Homework & { student: Pick<Student, 'id' | 'full_name' | 'avatar_url'> }
 
 export default function HomeworkPage() {
   const { openDrawer } = useAppStore()
   const supabase = createClient()
+  const searchParams = useSearchParams()
+  const deepLinkHandledRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const homeworkId = searchParams.get('homework')
+    if (!homeworkId || deepLinkHandledRef.current === homeworkId) return
+    deepLinkHandledRef.current = homeworkId
+    openDrawer('homework', homeworkId)
+  }, [openDrawer, searchParams])
 
   // Fetch homework
   const { data: homework, isLoading } = useQuery({

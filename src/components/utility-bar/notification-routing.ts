@@ -14,11 +14,25 @@ export function getNotificationHref(
     }
   }
 
-  const normalized = notification.type.toLowerCase()
-  if (normalized.includes('lesson')) return `${base}/lessons`
-  if (normalized.includes('homework')) return `${base}/homework`
-  if (normalized.includes('message')) return `${base}/messages`
-  if (normalized.includes('credit')) return `${base}/finance`
+  const type = (notification.notification_type || notification.type || '').toString()
+  switch (type) {
+    case 'lesson_upcoming_reminder':
+    case 'lesson_changed':
+    case 'lesson_scheduled_by_teacher':
+    case 'lesson_accepted_or_denied_by_student':
+    case 'lesson_booked_by_student':
+      return `${base}/lessons`
+    case 'homework_assigned':
+    case 'homework_due_soon':
+    case 'homework_submitted':
+      return `${base}/homework`
+    case 'message_received':
+      return `${base}/messages`
+    case 'credit_threshold_reached':
+      return role === 'teacher' ? '/teacher/students' : '/student/finance'
+    default:
+      break
+  }
 
   return `${base}/dashboard`
 }

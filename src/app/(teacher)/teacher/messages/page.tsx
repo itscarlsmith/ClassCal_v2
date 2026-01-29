@@ -12,6 +12,7 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Message } from '@/types/database'
+import { useSearchParams } from 'next/navigation'
 
 export default function MessagesPage() {
   const supabase = createClient()
@@ -20,6 +21,8 @@ export default function MessagesPage() {
   const [messageText, setMessageText] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const searchParams = useSearchParams()
+  const deepLinkHandledRef = useRef<string | null>(null)
 
   // Fetch current user
   const { data: currentUser } = useQuery({
@@ -49,6 +52,15 @@ export default function MessagesPage() {
     () => students?.find((s) => s.id === selectedThread) ?? null,
     [students, selectedThread]
   )
+
+  useEffect(() => {
+    const studentParam = searchParams.get('student')
+    if (!studentParam || deepLinkHandledRef.current === studentParam) return
+    if (students?.some((student) => student.id === studentParam)) {
+      deepLinkHandledRef.current = studentParam
+      setSelectedThread(studentParam)
+    }
+  }, [searchParams, students])
 
   const teacherId = currentUser?.id ?? null
   const studentProfileId = selectedStudent?.user_id ?? null

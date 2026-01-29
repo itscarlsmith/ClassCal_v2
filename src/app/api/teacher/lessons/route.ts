@@ -15,6 +15,31 @@ interface CreateLessonBody {
   status?: LessonStatus
 }
 
+type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>
+
+type NotificationEventInsert = {
+  user_id: string
+  notification_type:
+    | 'lesson_scheduled_by_teacher'
+    | 'lesson_changed'
+    | 'lesson_booked_by_student'
+    | 'lesson_accepted_or_denied_by_student'
+  event_key: string
+  source_type: 'lesson'
+  source_id: string
+  role: 'teacher' | 'student'
+  priority: number
+  payload: Record<string, unknown>
+}
+
+async function insertNotificationEvents(serviceSupabase: ServiceClient, events: NotificationEventInsert[]) {
+  if (!events.length) return
+  const { error } = await serviceSupabase.from('notification_events').insert(events)
+  if (error) {
+    console.error('Failed to insert notification events', error)
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
@@ -150,6 +175,40 @@ export async function POST(request: Request) {
       }
       console.error('Error creating lesson', insertError)
       return NextResponse.json({ error: 'Failed to create lesson.' }, { status: 500 })
+    }
+
+    if (studentRow.user_id) {
+      const { data: teacherProfile } = await serviceSupabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userData.user.id)
+        .single()
+
+      const teacherName = teacherProfile?.full_name || 'your teacher'
+      const titleText = 'Lesson scheduled'
+      const messageText = `New lesson with ${teacherName} scheduled.`
+
+      await insertNotificationEvents(serviceSupabase, [
+        {
+          user_id: studentRow.user_id,
+          notification_type: 'lesson_scheduled_by_teacher',
+          event_key: `lesson:${newLesson.id}:scheduled_by_teacher:${newLesson.created_at}`,
+          source_type: 'lesson',
+          source_id: newLesson.id,
+          role: 'student',
+          priority: 3,
+          payload: {
+            href: `/student/lessons?lesson=${newLesson.id}`,
+            title: titleText,
+            message: messageText,
+            email_subject: titleText,
+            email_body: messageText,
+            lesson_id: newLesson.id,
+            start_time: newLesson.start_time,
+            end_time: newLesson.end_time,
+          },
+        },
+      ])
     }
 
     return NextResponse.json({ lesson: newLesson })
